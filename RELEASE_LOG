@@ -1,3 +1,81 @@
+Fixes in mdtest-1.8.3
+ * Prepared for release on sourceforge.net
+
+Fixes in mdtest-1.8.2
+ * With the new changes issued in mdtest-1.8.0, all files and directories
+   were operated upon by using the full path to each file/dir.  Full paths
+   are no longer used.  Now a relative path is used from the root dir of 
+   each directory tree.
+ * fixed bug in collective creates and unique directory per task mode
+
+Fixes in mdtest-1.8.1
+ * A new test directory is created for each iteration.  Then for each 
+   iteration the directory structure is created/removed.  This allowed 
+   multiple iterations of the create-only mode.  The name of the test 
+   directories has changed as a result of this fix.  Also, aggregate 
+   creation/removal times are computed now over the number of iterations.
+
+Changes in mdtest-1.8.0
+ * added option to create files/dirs in tree-like directory structure: 
+   Previously, all files/dirs were created in one test directory.  Now the 
+   root directories of the tree(s) are created in that test directory.  
+   Files/dirs are then created within those root directories or their children.
+   If the -u flag is specified, then unique trees are created per proc.  
+   Otherwise, one tree is created.  This coincides with the previous 
+   functionality.  The following flags were added/changed to incorporate this 
+   new feature:
+    -z #: Indicates the depth of the leaves of the tree.  If this flag is not 
+          specified, the depth defaults to 0 (i.e. files/dirs are created in 
+          the top-level directories).
+    -b #: Indicates the branching factor of the tree.  If this flag is not 
+          specified, the branching factor defaults to 1.  Branching factor 
+          indicates the number of children that each non-leaf node has.
+    -L:   Indicates that files/dirs should only be created at the leaf level 
+          of the tree.
+    -I #: Indicates the number of files/dirs that should be created within 
+          each directory of the tree.
+    -n #: This flag still indicates the total number of files/dirs that should
+          be created.  However, with the new tree structure some calculations 
+          are done to determine the number of files that should be created per
+          directory in the tree.  Due to rounding the actual total number of 
+          files may differ slightly from what is specified.  
+   
+ * added option to choose which phases to run:
+   The create, stat, and remove phases of mdtest have been separated.  There 
+   are flags now that allow the user to choose which phases they want to 
+   perform.  If none of these flags is specified, then the default usage is 
+   to do all of the phases.  The user is trusted to be intelligent about their
+   choice of phases.  As a result of the separation of the phases, the naming 
+   convention of the files/dirs had to be altered slightly.
+          
+ * added option to not barrier between each phase (create/stat/remove):
+   A major change in mdtest is the ability to time each proc that is running 
+   the different phases of mdtest.  The default functionality is the same as 
+   the previous version - barriers are taken between phases (create/stat/
+   remove).  Also, in the default case, the resultant times reflect the 
+   slowest rates for each phase.  If the -B flag is specified, then no barriers
+   are taken between the phases.  There is a race condition when specifying 
+   this flag, but it is rarely met.  The race condition is that one proc might
+   be trying to remove a file in the shared file case before someone else has 
+   a chance to stat the file.  Also, when the -B flag is specified, the 
+   resultant rates are aggregates over the number of iterations and the number
+   of procs used.  The default case, as mentioned above, calculates aggregates
+   only over the number of iterations where the time for each phase of an
+   iteration is the time of the slowest proc for that particular phase.
+   
+ * added option to stat files/dirs in a random order:
+   The default usage of mdtest will stat files in sequential order.  Now, 
+   however, items can be stat'ed in a random order by specifying the -R flag.
+   Even though the stat order is random with this usage, items are still only 
+   stat'ed once each.  This is achieved by randomly sorting a list of unique 
+   item IDs before running the different tests.  A seed for the random number 
+   generator can optionally be provided with the following syntax: -R#.
+
+Fixes in mdtest-1.7.5
+ * changed bug in how test directory was created (race condition)
+ * added multipath option for test directories ('-d path1@path2@path3')
+ * added man page and correct malloc error-checking (patches from Jim Garlick)
+
 Fixes in mdtest-1.7.4:
  * folded b_remove_0 branch into main HEAD branch
 

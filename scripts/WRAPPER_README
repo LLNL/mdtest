@@ -1,0 +1,49 @@
+========================
+mdtest_wrapper.py README
+========================
+
+mdtest_wrapper.py is a wrapper for mdtest that inserts the results into
+a database.
+
+--------------
+Prerequisites:
+--------------
+
+Python 2.3.4 or higher
+setuptools (Python module installer)
+MySQLdb (a Python module)
+
+
+-------------
+Installation:
+-------------
+
+---setuptools---
+
+This is available http://pypi.python.org/pypi/setuptools.  Installing 
+from source is probably the least hassle.  
+
+Unzip and untar the package
+Change directories to the top level directory for setuptools
+Run:	python setup.py build
+Run:	python setup.py install --prefix=/some/install/directory
+	NOTE: --prefix arg is only necessary if you do not have
+	root permissions or you want to install the module into
+	some non-default directory
+If you designated some non-default install location, then add that
+	directory to PYTHONPATH
+
+
+---MySQLdb---
+
+This is available at http://sourceforge.net/projects/mysql-python/.
+Installing this module proceeds in the same manner as setuptools.
+
+
+------
+Usage:
+------
+
+python mdtest_wrapper.py mpirun [mpirun args] ./mdtest [mdtest args] [--desc descriptionOfTest]
+
+NOTE: mdtest needs to be compiled before running mdtest_wrapper.
