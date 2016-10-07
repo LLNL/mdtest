@@ -23,8 +23,8 @@
  *
  * CVS info:
  *   $RCSfile: mdtest.c,v $
- *   $Revision: 1.33 $
- *   $Date: 2004/06/21 16:56:13 $
+ *   $Revision: 1.36 $
+ *   $Date: 2005/03/09 19:49:25 $
  *   $Author: loewe $
  */
 
@@ -43,9 +43,9 @@
 #include <sys/time.h>
 
 #define FILEMODE S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH
-#define DIRMODE S_IRUSR|S_IXUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IXOTH
+#define DIRMODE S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IWGRP|S_IROTH
 #define MAX_LEN 1024
-#define RELEASE_VERS "1.7.1"
+#define RELEASE_VERS "1.7.2"
 
 typedef struct
 {
@@ -66,16 +66,16 @@ char unique_stat_dir[MAX_LEN];
 char unique_rm_dir[MAX_LEN];
 char unique_rm_uni_dir[MAX_LEN];
 char * write_buffer = NULL;
-int shared_file;
-int files_only;
-int dirs_only;
-int pre_delay;
-int unique_dir_per_task;
-int time_unique_dir_overhead;
-int verbose;
+int shared_file = 0;
+int files_only = 0;
+int dirs_only = 0;
+int pre_delay = 0;
+int unique_dir_per_task = 0;
+int time_unique_dir_overhead = 0;
+int verbose = 0;
 int throttle = 1;
-int items;
-int collective_creates;
+int items = 0;
+int collective_creates = 0;
 int write_bytes = 0;
 int sync_file = 0;
 MPI_Comm testcomm;
@@ -165,7 +165,7 @@ void offset_timers(double * t, int tcount) {
 void unique_dir_access(int opt) {
     if (opt == MK_UNI_DIR) {
         if (!shared_file || !rank) {
-            if (mkdir(unique_mk_dir, S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
+            if (mkdir(unique_mk_dir, DIRMODE) == -1) {
                 FAIL("Unable to create unique directory");
             }
         }
@@ -635,10 +635,6 @@ int main(int argc, char **argv) {
         }
 	fprintf(stdout, "\n");
         fflush(stdout);
-
-        /* display disk usage */
-        sprintf(dfCall, "df %s\n", testdir);
-        system(dfCall);
     }
 
     /* allocate and initialize write buffer with # */
@@ -649,9 +645,23 @@ int main(int argc, char **argv) {
 
     if (testdir != NULL) {
         if (chdir(testdir) == -1) {
-            FAIL("Unable to chdir to test directory");
+            if (rank == 0 && mkdir(testdir, DIRMODE) == - 1) {
+                FAIL("Unable to create test directory");
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (chdir(testdir) == -1) {
+                FAIL("Unable to change to test directory");
+            }
         }
     }
+
+    if (rank == 0) {
+        /* display disk usage */
+        sprintf(dfCall, "df %s\n", testdirpath);
+        system(dfCall);
+        fflush(stdout);
+    }
+
     if (gethostname(hostname, MAX_LEN) == -1) {
         perror("gethostname");
         MPI_Abort(MPI_COMM_WORLD, 2);

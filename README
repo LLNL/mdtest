@@ -5,11 +5,12 @@
 *                                                                              *
 \******************************************************************************/
 
-Usage:	mdtest [-h] [-f first] [-i iterations] [-l last] [-s stride] [-n #]
+Usage:	mdtest [-h] [-c] [-f first] [-i iterations] [-l last] [-s stride] [-n #]
                [-p seconds] [-d testdir] [-t] [-u] [-v] [-y] [-D] [-F] [-N #]
                [-S] [-V #]
 
 	-h: prints this help message
+	-c: collective creates: task 0 does all creates and deletes
 	-d: the directory in which the tests will run
 	-f: first number of tasks on which the test will run
 	-i: number of iterations the test will run
@@ -26,3 +27,6 @@ Usage:	mdtest [-h] [-f first] [-i iterations] [-l last] [-s stride] [-n #]
 	-N: stride # between neighbor tasks for file/dir stat (local=0)
 	-S: shared file access (file only, no directories)
 	-V: verbosity value
+
+NOTES:
+ * -N allows a "read-your-neighbor" approach by setting stride to tasks-per-node
