@@ -23,8 +23,8 @@
  *
  * CVS info:
  *   $RCSfile: mdtest.c,v $
- *   $Revision: 1.38 $
- *   $Date: 2006/07/18 18:51:49 $
+ *   $Revision: 1.39 $
+ *   $Date: 2006/08/09 22:13:13 $
  *   $Author: loewe $
  */
 
@@ -44,10 +44,10 @@
 #include <sys/time.h>
 
 #define FILEMODE S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH
-#define DIRMODE S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IWGRP|S_IROTH
+#define DIRMODE S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IWGRP|S_IXGRP|S_IROTH|S_IXOTH
 #define MAX_LEN 1024
 #define RELEASE_VERS "1.7.3"
-#define TEST_DIR ".mdtest"
+#define TEST_DIR "#test-dir"
 
 typedef struct
 {
@@ -56,7 +56,7 @@ typedef struct
 
 int rank;
 int size;
-char testdir[MAX_LEN] = ".";
+char testdir[MAX_LEN];
 char testdirpath[MAX_LEN] = ".";
 char hostname[MAX_LEN];
 char unique_dir[MAX_LEN];
@@ -70,6 +70,7 @@ char unique_rm_dir[MAX_LEN];
 char unique_rm_uni_dir[MAX_LEN];
 char * write_buffer = NULL;
 int shared_file = 0;
+int remove_only = 0;
 int files_only = 0;
 int dirs_only = 0;
 int pre_delay = 0;
@@ -172,7 +173,7 @@ void unique_dir_access(int opt) {
                 FAIL("Unable to create unique directory");
             }
         }
-	MPI_Barrier(testcomm);
+        MPI_Barrier(testcomm);
         if (chdir(unique_chdir_dir) == -1) {
             FAIL("Unable to chdir to unique test directory");
         }
@@ -202,54 +203,56 @@ void directory_test(int iteration, int ntasks) {
     char dir[MAX_LEN];
     double t[4] = {0};
 
-    MPI_Barrier(testcomm);
-    t[0] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(MK_UNI_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 0);
+    if (!remove_only) {
+        MPI_Barrier(testcomm);
+        t[0] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(MK_UNI_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 0);
+            }
         }
-    }
-    /* "touch" the files */
-    if (collective_creates) {
-        if (rank == 0) {
-            for (j = 0; j < ntasks; j++) {
-                for (i = 0; i < items; i++) {
-                    sprintf(dir, "mdtest.%d.%d", j, i);
-                    if (mkdir(dir, DIRMODE) == -1) {
-                        FAIL("unable to create directory");
+        /* "touch" the files */
+        if (collective_creates) {
+            if (rank == 0) {
+                for (j = 0; j < ntasks; j++) {
+                    for (i = 0; i < items; i++) {
+                        sprintf(dir, "mdtest.%d.%d", j, i);
+                        if (mkdir(dir, DIRMODE) == -1) {
+                            FAIL("unable to create directory");
+                        }
                     }
                 }
             }
-        }
-    } else {
-        for (i = 0; i < items; i++) {
-            sprintf(dir, "%s%d", mk_name, i);
-            if (mkdir(dir, DIRMODE) == -1) {
-                FAIL("unable to create directory");
+        } else {
+            for (i = 0; i < items; i++) {
+                sprintf(dir, "%s%d", mk_name, i);
+                if (mkdir(dir, DIRMODE) == -1) {
+                    FAIL("unable to create directory");
+                }
             }
         }
-    }
-    MPI_Barrier(testcomm);
-    t[1] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(STAT_SUB_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 1);
+        MPI_Barrier(testcomm);
+        t[1] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(STAT_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 1);
+            }
         }
-    }
-    for (i = 0; i < items; i++) {
-        sprintf(dir, "%s%d", stat_name, i);
-        if (stat(dir, &buf) == -1) {
-            FAIL("unable to stat directory");
+        for (i = 0; i < items; i++) {
+            sprintf(dir, "%s%d", stat_name, i);
+            if (stat(dir, &buf) == -1) {
+                FAIL("unable to stat directory");
+            }
         }
-    }
-    MPI_Barrier(testcomm);
-    t[2] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(RM_SUB_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 2);
+        MPI_Barrier(testcomm);
+        t[2] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(RM_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 2);
+            }
         }
     }
     if (collective_creates) {
@@ -257,7 +260,7 @@ void directory_test(int iteration, int ntasks) {
             for (j = 0; j < ntasks; j++) {
                 for (i = 0; i < items; i++) {
                     sprintf(dir, "mdtest.%d.%d", j, i);
-                    if (rmdir(dir) == -1) {
+                    if ((rmdir(dir) == -1) && (!remove_only)) {
                         FAIL("unable to remove directory");
                     }
                 }
@@ -266,33 +269,35 @@ void directory_test(int iteration, int ntasks) {
     } else {
         for (i = 0; i < items; i++) {
             sprintf(dir, "%s%d", rm_name, i);
-            if (rmdir(dir) == -1) {
+            if ((rmdir(dir) == -1) && (!remove_only)) {
                 FAIL("unable to remove directory");
             }
         }
     }
-    MPI_Barrier(testcomm);
-    if (unique_dir_per_task) {
-        unique_dir_access(RM_UNI_DIR);
-    }
-    t[3] = MPI_Wtime();
-    if (unique_dir_per_task && !time_unique_dir_overhead) {
-        offset_timers(t, 3);
-    }
-
-    if (rank == 0) {
-        MPI_Comm_size(testcomm, &size);
-        summary_table[iteration].entry[0] = items*size/(t[1] - t[0]);
-        summary_table[iteration].entry[1] = items*size/(t[2] - t[1]);
-        summary_table[iteration].entry[2] = items*size/(t[3] - t[2]);
-        if (verbose) {
-            printf("   Directory creation: %10.3f sec, %10.3f ops/sec\n",
-                   t[1] - t[0], summary_table[iteration].entry[0]);
-            printf("   Directory stat    : %10.3f sec, %10.3f ops/sec\n",
-                   t[2] - t[1], summary_table[iteration].entry[1]);
-            printf("   Directory removal : %10.3f sec, %10.3f ops/sec\n",
-                   t[3] - t[2], summary_table[iteration].entry[2]);
-            fflush(stdout);
+    if (!remove_only) {
+        MPI_Barrier(testcomm);
+        if (unique_dir_per_task) {
+            unique_dir_access(RM_UNI_DIR);
+        }
+        t[3] = MPI_Wtime();
+        if (unique_dir_per_task && !time_unique_dir_overhead) {
+            offset_timers(t, 3);
+        }
+    
+        if (rank == 0) {
+            MPI_Comm_size(testcomm, &size);
+            summary_table[iteration].entry[0] = items*size/(t[1] - t[0]);
+            summary_table[iteration].entry[1] = items*size/(t[2] - t[1]);
+            summary_table[iteration].entry[2] = items*size/(t[3] - t[2]);
+            if (verbose) {
+                printf("   Directory creation: %10.3f sec, %10.3f ops/sec\n",
+                       t[1] - t[0], summary_table[iteration].entry[0]);
+                printf("   Directory stat    : %10.3f sec, %10.3f ops/sec\n",
+                       t[2] - t[1], summary_table[iteration].entry[1]);
+                printf("   Directory removal : %10.3f sec, %10.3f ops/sec\n",
+                       t[3] - t[2], summary_table[iteration].entry[2]);
+                fflush(stdout);
+            }
         }
     }
 }
@@ -303,74 +308,76 @@ void file_test(int iteration, int ntasks) {
     char file[MAX_LEN];
     double t[4] = {0};
 
-    MPI_Barrier(testcomm);
-    t[0] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(MK_UNI_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 0);
+    if (!remove_only) {
+        MPI_Barrier(testcomm);
+        t[0] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(MK_UNI_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 0);
+            }
         }
-    }
-    /* "touch" the files */
-    if (collective_creates) {
-        if (rank == 0) {
-            for (j = 0; j < ntasks; j++) {
-                for (i = 0; i < items; i++) {
-                    sprintf(file, "mdtest.%d.%d", j, i);
-                    if ((fd = creat(file, FILEMODE)) == -1) {
-                        FAIL("unable to create file");
-                    }
-                    if (close(fd) == -1) {
-                        FAIL("unable to close file");
+        /* "touch" the files */
+        if (collective_creates) {
+            if (rank == 0) {
+                for (j = 0; j < ntasks; j++) {
+                    for (i = 0; i < items; i++) {
+                        sprintf(file, "mdtest.%d.%d", j, i);
+                        if ((fd = creat(file, FILEMODE)) == -1) {
+                            FAIL("unable to create file");
+                        }
+                        if (close(fd) == -1) {
+                            FAIL("unable to close file");
+                        }
                     }
                 }
             }
+            MPI_Barrier(testcomm);
+        }
+    
+        for (i = 0; i < items; i++) {
+            sprintf(file, "%s%d", mk_name, i);
+            if (collective_creates) {
+                if ((fd = open(file, O_RDWR)) == -1) {
+                    FAIL("unable to open file");
+                }
+            } else {
+                if ((fd = creat(file, FILEMODE)) == -1) {
+                    FAIL("unable to create file");
+                }
+            }
+            if (write_bytes > 0) {
+                if (write(fd, write_buffer, write_bytes) != write_bytes)
+                    FAIL("unable to write file");
+            }
+            if (sync_file && fsync(fd) == -1) {
+                FAIL("unable to sync file");
+            }
+            if (close(fd) == -1) {
+                FAIL("unable to close file");
+            }
         }
         MPI_Barrier(testcomm);
-    }
-
-    for (i = 0; i < items; i++) {
-        sprintf(file, "%s%d", mk_name, i);
-        if (collective_creates) {
-            if ((fd = open(file, O_RDWR)) == -1) {
-                FAIL("unable to open file");
-            }
-        } else {
-            if ((fd = creat(file, FILEMODE)) == -1) {
-                FAIL("unable to create file");
+        t[1] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(STAT_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 1);
             }
         }
-        if (write_bytes > 0) {
-            if (write(fd, write_buffer, write_bytes) != write_bytes)
-                FAIL("unable to write file");
+        for (i = 0; i < items; i++) {
+            sprintf(file, "%s%d", stat_name, i);
+            if (stat(file, &buf) == -1) {
+                FAIL("unable to stat file");
+            }
         }
-        if (sync_file && fsync(fd) == -1) {
-            FAIL("unable to sync file");
-        }
-        if (close(fd) == -1) {
-            FAIL("unable to close file");
-        }
-    }
-    MPI_Barrier(testcomm);
-    t[1] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(STAT_SUB_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 1);
-        }
-    }
-    for (i = 0; i < items; i++) {
-        sprintf(file, "%s%d", stat_name, i);
-        if (stat(file, &buf) == -1) {
-            FAIL("unable to stat file");
-        }
-    }
-    MPI_Barrier(testcomm);
-    t[2] = MPI_Wtime();
-    if (unique_dir_per_task) {
-        unique_dir_access(RM_SUB_DIR);
-        if (!time_unique_dir_overhead) {
-            offset_timers(t, 2);
+        MPI_Barrier(testcomm);
+        t[2] = MPI_Wtime();
+        if (unique_dir_per_task) {
+            unique_dir_access(RM_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 2);
+            }
         }
     }
     if (collective_creates) {
@@ -378,7 +385,7 @@ void file_test(int iteration, int ntasks) {
             for (j = 0; j < ntasks; j++) {
                 for (i = 0; i < items; i++) {
                     sprintf(file, "mdtest.%d.%d", j, i);
-                    if (unlink(file) == -1) {
+                    if ((unlink(file) == -1) && (!remove_only)) {
                         FAIL("unable to unlink file");
                     }
                 }
@@ -388,34 +395,36 @@ void file_test(int iteration, int ntasks) {
         for (i = 0; i < items; i++) {
             sprintf(file, "%s%d", rm_name, i);
             if (!(shared_file && rank != 0)) {
-                if (unlink(file) == -1) {
+                if ((unlink(file) == -1) && (!remove_only)) {
                     FAIL("unable to unlink file");
                 }
             }
         }
     }
-    MPI_Barrier(testcomm);
-    if (unique_dir_per_task) {
-        unique_dir_access(RM_UNI_DIR);
-    }
-    t[3] = MPI_Wtime();
-    if (unique_dir_per_task && !time_unique_dir_overhead) {
-        offset_timers(t, 3);
-    }
-
-    if (rank == 0) {
-        MPI_Comm_size(testcomm, &size);
-        summary_table[iteration].entry[3] = items*size/(t[1] - t[0]);
-        summary_table[iteration].entry[4] = items*size/(t[2] - t[1]);
-        summary_table[iteration].entry[5] = items*size/(t[3] - t[2]);
-        if (verbose) {
-            printf("   File creation     : %10.3f sec, %10.3f ops/sec\n",
-                   t[1] - t[0], summary_table[iteration].entry[3]);
-            printf("   File stat         : %10.3f sec, %10.3f ops/sec\n",
-                   t[2] - t[1], summary_table[iteration].entry[4]);
-            printf("   File removal      : %10.3f sec, %10.3f ops/sec\n",
-                   t[3] - t[2], summary_table[iteration].entry[5]);
-            fflush(stdout);
+    if (!remove_only) {
+        MPI_Barrier(testcomm);
+        if (unique_dir_per_task) {
+            unique_dir_access(RM_UNI_DIR);
+        }
+        t[3] = MPI_Wtime();
+        if (unique_dir_per_task && !time_unique_dir_overhead) {
+            offset_timers(t, 3);
+        }
+    
+        if (rank == 0) {
+            MPI_Comm_size(testcomm, &size);
+            summary_table[iteration].entry[3] = items*size/(t[1] - t[0]);
+            summary_table[iteration].entry[4] = items*size/(t[2] - t[1]);
+            summary_table[iteration].entry[5] = items*size/(t[3] - t[2]);
+            if (verbose) {
+                printf("   File creation     : %10.3f sec, %10.3f ops/sec\n",
+                       t[1] - t[0], summary_table[iteration].entry[3]);
+                printf("   File stat         : %10.3f sec, %10.3f ops/sec\n",
+                       t[2] - t[1], summary_table[iteration].entry[4]);
+                printf("   File removal      : %10.3f sec, %10.3f ops/sec\n",
+                       t[3] - t[2], summary_table[iteration].entry[5]);
+                fflush(stdout);
+            }
         }
     }
 }
@@ -423,8 +432,8 @@ void file_test(int iteration, int ntasks) {
 void print_help() {
     char * opts[] = {
 "Usage: mdtest [-h] [-f first] [-i iterations] [-l last] [-s stride] [-n #]",
-"              [-p seconds] [-d testdir] [-t] [-u] [-v] [-D] [-F] [-N #] [-S]",
-"              [-V #]",
+"              [-p seconds] [-d testdir] [-r] [-t] [-u] [-v] [-D] [-F] [-N #]",
+"              [-S] [-V #]",
 "\t-h: prints this help message",
 "\t-c: collective creates: task 0 does all creates",
 "\t-d: the directory in which the tests will run",
@@ -433,6 +442,7 @@ void print_help() {
 "\t-l: last number of tasks on which the test will run",
 "\t-n: every process will creat/stat/remove # directories and files",
 "\t-p: pre-iteration delay (in seconds)",
+"\t-r: only remove files or directories left behind by previous runs",
 "\t-s: stride between the number of tasks for each test",
 "\t-t: time unique working directory overhead",
 "\t-u: unique working directory for each task",
@@ -465,8 +475,10 @@ void summarize_results(int iterations) {
     double min, max, mean, sd, sum = 0, var = 0;
 
     printf("\nSUMMARY: (of %d iterations)\n", iterations);
-    printf("   Operation                  Max        Min       Mean    Std Dev\n");
-    printf("   ---------                  ---        ---       ----    -------\n");
+    printf(
+        "   Operation                  Max        Min       Mean    Std Dev\n");
+    printf(
+        "   ---------                  ---        ---       ----    -------\n");
     fflush(stdout);
     /* if files only access, skip entries 0-2 (the dir tests) */
     if (files_only && !dirs_only) {
@@ -496,14 +508,14 @@ void summarize_results(int iterations) {
             if (max < summary_table[j].entry[i]) {
                 max = summary_table[j].entry[i];
             }
-	    sum += summary_table[j].entry[i];
+            sum += summary_table[j].entry[i];
         }
-	mean = sum / iterations;
+        mean = sum / iterations;
         for (j = 0; j < iterations; j++) {
-	    var += pow((mean - summary_table[j].entry[i]), 2);
+            var += pow((mean - summary_table[j].entry[i]), 2);
         }
-	var = var / iterations;
-	sd = sqrt(var);
+        var = var / iterations;
+        sd = sqrt(var);
         switch (i) {
             case 0: strcpy(access, "Directory creation:"); break;
             case 1: strcpy(access, "Directory stat    :"); break;
@@ -513,13 +525,13 @@ void summarize_results(int iterations) {
             case 5: strcpy(access, "File removal      :"); break;
            default: strcpy(access, "ERR");                 break;
         }
-	printf("   %s ", access);
-	printf("%10.3f ", max);
-	printf("%10.3f ", min);
-	printf("%10.3f ", mean);
-	printf("%10.3f\n", sd);
+        printf("   %s ", access);
+        printf("%10.3f ", max);
+        printf("%10.3f ", min);
+        printf("%10.3f ", mean);
+        printf("%10.3f\n", sd);
         fflush(stdout);
-	sum = var = 0;
+        sum = var = 0;
     }
 }
 
@@ -597,6 +609,34 @@ void show_file_system_size(char *file_system) {
     return;
 }
 
+void display_freespace(char *testdirpath)
+{
+    char dirpath[MAX_LEN] = {0};
+    int  i;
+    int  directoryFound   = 0;
+
+    strcpy(dirpath, testdirpath);
+
+    /* get directory for outfile */
+    i = strlen(dirpath);
+    while (i-- > 0) {
+        if (dirpath[i] == '/') {
+            dirpath[i] = '\0';
+            directoryFound = 1;
+            break;
+        }
+    }
+
+    /* if no directory/, use '.' */
+    if (directoryFound == 0) {
+        strcpy(dirpath, ".");
+    }
+
+    show_file_system_size(dirpath);
+
+    return;
+}
+
 int main(int argc, char **argv) {
     int i, j, c;
     int nodeCount;
@@ -635,7 +675,7 @@ int main(int argc, char **argv) {
 
     /* Parse command line options */
     while (1) {
-        c = getopt(argc, argv, "cd:Df:Fhi:l:n:N:p:s:StuvV:w:y");
+        c = getopt(argc, argv, "cd:Df:Fhi:l:n:N:p:rs:StuvV:w:y");
         if (c == -1) {
             break;
         }
@@ -644,7 +684,7 @@ int main(int argc, char **argv) {
             case 'c':
                 collective_creates = 1;       break;
             case 'd':
-                strcpy(testdir, optarg);      break;
+                strcpy(testdirpath, optarg);  break;
             case 'D':
                 dirs_only = 1;                break;
             case 'f':
@@ -663,6 +703,8 @@ int main(int argc, char **argv) {
                 nstride = atoi(optarg);       break;
             case 'p':
                 pre_delay = atoi(optarg);     break;
+            case 'r':
+                remove_only = 1;              break;
             case 's':
                 stride = atoi(optarg);        break;
             case 'S':
@@ -689,7 +731,7 @@ int main(int argc, char **argv) {
         for (i = 0; i < argc; i++) {
             fprintf(stdout, " %s", argv[i]);
         }
-	fprintf(stdout, "\n");
+        fprintf(stdout, "\n");
         fflush(stdout);
     }
 
@@ -699,22 +741,27 @@ int main(int argc, char **argv) {
         memset(write_buffer, 0x23, write_bytes);
     }
 
-    if (testdir != NULL) {
-        if (chdir(testdir) == -1) {
-            if (rank == 0 && mkdir(testdir, DIRMODE) == - 1) {
-                FAIL("Unable to create test directory");
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
-            if (chdir(testdir) == -1) {
-                FAIL("Unable to change to test directory");
-            }
-        }
-    }
+    /* create directory path to work in */
+    strcpy(testdir, testdirpath);
+    strcat(testdir, "/");
+    strcat(testdir, TEST_DIR);
 
-    if (rank == 0) {
-        /* display disk usage */
-        show_file_system_size(testdir);
-        fflush(stdout);
+    /* display disk usage */
+    if (rank == 0) display_freespace(testdirpath);
+
+    /*   if directory does not exist, create it */
+    if (chdir(testdirpath) == -1) {
+        if (rank == 0 && mkdir(testdirpath, DIRMODE) == - 1) {
+            FAIL("Unable to create test directory path");
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (rank == 0 && mkdir(testdir, DIRMODE) == - 1) {
+            FAIL("Unable to create test directory");
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (chdir(testdir) == -1) {
+            FAIL("Unable to change to test directory");
+        }
     }
 
     if (gethostname(hostname, MAX_LEN) == -1) {
@@ -794,7 +841,7 @@ int main(int argc, char **argv) {
             }
             MPI_Barrier(MPI_COMM_WORLD);
         }
-	if (rank == 0) {
+        if ((rank == 0) && (!remove_only)) {
             summarize_results(iterations);
         }
         if (i == 1 && stride > 1) {

@@ -1,0 +1,20 @@
+Fixes in mdtest-1.7.4:
+ * folded b_remove_0 branch into main HEAD branch
+
+Fixes in mdtest-b_remove_0:
+ * added remove option to only remove files from previous run
+
+Fixes in mdtest-pre_b_remove_0:
+ * simple clean up for preparing for branch
+
+Fixes in mdtest-1.7.3:
+ * added statfs() to get file system data block and inode usage, replacing
+   system() call
+
+Fixes in mdtest-1.7.2:
+ * initialized declared variables
+ * modified df disk usage call
+ * added error-checking for chdir()
+
+Fixes in mdtest-1.7.1:
+ * added '-y' option to sync file after write

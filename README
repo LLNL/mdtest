@@ -6,8 +6,8 @@
 \******************************************************************************/
 
 Usage:	mdtest [-h] [-c] [-f first] [-i iterations] [-l last] [-s stride] [-n #]
-               [-p seconds] [-d testdir] [-t] [-u] [-v] [-y] [-D] [-F] [-N #]
-               [-S] [-V #]
+               [-p seconds] [-d testdir] [-r] [-t] [-u] [-v] [-y] [-D] [-F]
+               [-N #] [-S] [-V #]
 
 	-h: prints this help message
 	-c: collective creates: task 0 does all creates and deletes
@@ -17,6 +17,7 @@ Usage:	mdtest [-h] [-c] [-f first] [-i iterations] [-l last] [-s stride] [-n #]
 	-l: last number of tasks on which the test will run
 	-n: every process will creat/stat/remove # directories and files
 	-p: pre-iteration delay (in seconds)
+	-r: only remove files or directories left behind by previous runs
 	-s: stride between the number of tasks for each test
 	-t: time unique working directory overhead
 	-u: unique working directory for each task
