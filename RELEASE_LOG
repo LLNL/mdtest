@@ -1,3 +1,11 @@
+Changes in mdtest-1.8.4
+ * Re-released correcting version number.
+
+Changes in mdtest-1.8.4
+ * Added read option to extend create (write) capability.  New feature will:
+   -E: Only perform the read phase of the tests.
+   -e #: Set the number of Bytes to read from each file.
+
 Fixes in mdtest-1.8.3
  * Prepared for release on sourceforge.net
 

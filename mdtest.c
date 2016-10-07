@@ -52,13 +52,13 @@
 #define FILEMODE S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH
 #define DIRMODE S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IWGRP|S_IXGRP|S_IROTH|S_IXOTH
 #define MAX_LEN 1024
-#define RELEASE_VERS "1.8.3"
+#define RELEASE_VERS "1.8.4"
 #define TEST_DIR "#test-dir"
 #define ITEM_COUNT 25000
 
 typedef struct
 {
-    double entry[8];
+    double entry[10];
 } table_t;
 
 int rank;
@@ -73,16 +73,20 @@ char hostname[MAX_LEN];
 char unique_dir[MAX_LEN];
 char mk_name[MAX_LEN];
 char stat_name[MAX_LEN];
+char read_name[MAX_LEN];
 char rm_name[MAX_LEN];
 char unique_mk_dir[MAX_LEN];
 char unique_chdir_dir[MAX_LEN];
 char unique_stat_dir[MAX_LEN];
+char unique_read_dir[MAX_LEN];
 char unique_rm_dir[MAX_LEN];
 char unique_rm_uni_dir[MAX_LEN];
 char * write_buffer = NULL;
+char * read_buffer = NULL;
 int barriers = 1;
 int create_only = 0;
 int stat_only = 0;
+int read_only = 0;
 int remove_only = 0;
 int leaf_only = 0;
 int branch_factor = 1;
@@ -101,6 +105,7 @@ int throttle = 1;
 int items = 0;
 int collective_creates = 0;
 int write_bytes = 0;
+int read_bytes = 0;
 int sync_file = 0;
 int path_count = 0;
 int nstride = 0; /* neighbor stride */
@@ -108,7 +113,7 @@ MPI_Comm testcomm;
 table_t * summary_table;
 
 /* for making/removing unique directory && stating/deleting subdirectory */
-enum {MK_UNI_DIR, STAT_SUB_DIR, RM_SUB_DIR, RM_UNI_DIR};
+enum {MK_UNI_DIR, STAT_SUB_DIR, READ_SUB_DIR, RM_SUB_DIR, RM_UNI_DIR};
 
 #ifdef __linux__
 #define FAIL(msg) do { \
@@ -223,6 +228,10 @@ void unique_dir_access(int opt) {
         }
     } else if (opt == STAT_SUB_DIR) {
         if (chdir(unique_stat_dir) == -1) {
+            FAIL("Unable to chdir to test directory");
+        }
+    } else if (opt == READ_SUB_DIR) {
+        if (chdir(unique_read_dir) == -1) {
             FAIL("Unable to chdir to test directory");
         }
     } else if (opt == RM_SUB_DIR) {
@@ -567,6 +576,105 @@ void mdtest_stat(int random, int dirs) {
     }
 }
 
+
+/* reads all of the items created as specified by the input parameters */
+void mdtest_read(int random, int dirs) {
+	
+	int i, parent_dir, item_num = 0;
+        int fd;
+	char item[MAX_LEN], temp[MAX_LEN];
+
+        /* allocate read buffer */
+        if (read_bytes > 0) {
+            read_buffer = (char *)malloc(read_bytes);
+            if (read_buffer == NULL) {
+                FAIL("out of memory");
+            }
+        }
+
+  	/* determine the number of items to read */
+        int stop = 0;
+        if (leaf_only) {
+            stop = items_per_dir * pow(branch_factor, depth);
+        } else {
+            stop = items;
+        }
+  
+	/* iterate over all of the item IDs */
+	for (i = 0; i < stop; i++) {
+   	  
+		memset(&item, 0, MAX_LEN);
+		memset(temp, 0, MAX_LEN);
+
+        /* determine the item number to read */
+        if (random) {
+            item_num = rand_array[i];
+        } else {
+            item_num = i;
+        }
+
+		/* make adjustments if in leaf only mode*/
+        if (leaf_only) {
+            item_num += items_per_dir * 
+                (num_dirs_in_tree - pow(branch_factor,depth));
+        }
+        
+		/* create name of file to read */
+        if (dirs) {
+            ; /* N/A */
+        } else {
+            if (rank == 0 && verbose >= 3 && (i%ITEM_COUNT == 0) && (i != 0)) {
+                printf("read file: %d\n", i);
+                fflush(stdout);
+            }
+            sprintf(item, "file.%s%d", read_name, item_num);
+        }
+
+        /* determine the path to the file/dir to be read'ed */
+        parent_dir = item_num / items_per_dir;
+
+        if (parent_dir > 0) {        //item is not in tree's root directory
+
+            /* prepend parent directory to item's path */
+            sprintf(temp, "%s.%d/%s", base_tree_name, parent_dir, item);
+            strcpy(item, temp);
+            
+            //still not at the tree's root dir
+            while (parent_dir > branch_factor) {
+                parent_dir = (int) ((parent_dir-1) / branch_factor);
+                sprintf(temp, "%s.%d/%s", base_tree_name, parent_dir, item);
+                strcpy(item, temp);
+            }
+        }
+
+        /* below temp used to be hiername */
+        if (rank == 0 && verbose >= 2) {
+            if (dirs) {
+                ;
+            } else {
+                printf("read   file: %s\n", item);
+            }
+            fflush(stdout);
+        }
+
+        /* open file for reading */
+        if ((fd = open(item, O_RDWR, FILEMODE)) == -1) {
+            FAIL("unable to open file");
+        }
+
+        /* read file */
+        if (read_bytes > 0) {
+            if (read(fd, read_buffer, read_bytes) != read_bytes)
+                FAIL("unable to read file");
+        }
+
+        /* close file */
+        if (close(fd) == -1) {
+            FAIL("unable to close file");
+        }
+    }
+}
+
 /* This method should be called by rank 0.  It subsequently does all of
    the creates and removes for the other ranks */
 void collective_create_remove(int create, int dirs, int ntasks) {
@@ -600,7 +708,8 @@ void collective_create_remove(int create, int dirs, int ntasks) {
         if (!shared_file) {
             sprintf(mk_name, "mdtest.%d.", (i+(0*nstride))%ntasks);
             sprintf(stat_name, "mdtest.%d.", (i+(1*nstride))%ntasks);
-            sprintf(rm_name, "mdtest.%d.", (i+(2*nstride))%ntasks);
+            sprintf(read_name, "mdtest.%d.", (i+(2*nstride))%ntasks);
+            sprintf(rm_name, "mdtest.%d.", (i+(3*nstride))%ntasks);
         }
         if (unique_dir_per_task) {
             sprintf(unique_mk_dir, "%s/mdtest_tree.%d.0", testdir, 
@@ -609,8 +718,10 @@ void collective_create_remove(int create, int dirs, int ntasks) {
                     (i+(1*nstride))%ntasks);
             sprintf(unique_stat_dir, "%s/mdtest_tree.%d.0", testdir, 
                     (i+(2*nstride))%ntasks);
-            sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir, 
+            sprintf(unique_read_dir, "%s/mdtest_tree.%d.0", testdir, 
                     (i+(3*nstride))%ntasks);
+            sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir, 
+                    (i+(4*nstride))%ntasks);
             sprintf(unique_rm_uni_dir, "%s", testdir);
         }
         
@@ -633,7 +744,8 @@ void collective_create_remove(int create, int dirs, int ntasks) {
     if (!shared_file) {
         sprintf(mk_name, "mdtest.%d.", (0+(0*nstride))%ntasks);
         sprintf(stat_name, "mdtest.%d.", (0+(1*nstride))%ntasks);
-        sprintf(rm_name, "mdtest.%d.", (0+(2*nstride))%ntasks);
+        sprintf(read_name, "mdtest.%d.", (0+(2*nstride))%ntasks);
+        sprintf(rm_name, "mdtest.%d.", (0+(3*nstride))%ntasks);
     }
     if (unique_dir_per_task) {
         sprintf(unique_mk_dir, "%s/mdtest_tree.%d.0", testdir, 
@@ -642,8 +754,10 @@ void collective_create_remove(int create, int dirs, int ntasks) {
                 (0+(1*nstride))%ntasks);
         sprintf(unique_stat_dir, "%s/mdtest_tree.%d.0", testdir, 
                 (0+(2*nstride))%ntasks);
-        sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir, 
+        sprintf(unique_read_dir, "%s/mdtest_tree.%d.0", testdir, 
                 (0+(3*nstride))%ntasks);
+        sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir, 
+                (0+(4*nstride))%ntasks);
         sprintf(unique_rm_uni_dir, "%s", testdir);
     }
     
@@ -652,7 +766,7 @@ void collective_create_remove(int create, int dirs, int ntasks) {
 void directory_test(int iteration, int ntasks) {
 
     int size;
-    double t[4] = {0};
+    double t[5] = {0};
 
     MPI_Barrier(testcomm);
     t[0] = MPI_Wtime();
@@ -705,12 +819,36 @@ void directory_test(int iteration, int ntasks) {
         MPI_Barrier(testcomm);
     }
     t[2] = MPI_Wtime();
+
+    /* read phase */
+    if (read_only) {
+        
+        if (unique_dir_per_task) {
+            unique_dir_access(READ_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 2);
+            }
+        }
+        
+		/* read directories */
+		if (random_seed > 0) {
+	        ;	/* N/A */
+        } else {	
+	        ;	/* N/A */
+        }
+
+    }
+    
+    if (barriers) {
+        MPI_Barrier(testcomm);
+    }
+    t[3] = MPI_Wtime();
     
     if (remove_only) {
        if (unique_dir_per_task) {
             unique_dir_access(RM_SUB_DIR);
             if (!time_unique_dir_overhead) {
-                offset_timers(t, 2);
+                offset_timers(t, 3);
             }
         }
     }
@@ -731,7 +869,7 @@ void directory_test(int iteration, int ntasks) {
     if (barriers) {
         MPI_Barrier(testcomm);
     }
-    t[3] = MPI_Wtime();
+    t[4] = MPI_Wtime();
     
     if (remove_only) {
         if (unique_dir_per_task) {
@@ -739,7 +877,7 @@ void directory_test(int iteration, int ntasks) {
         }
     }
     if (unique_dir_per_task && !time_unique_dir_overhead) {
-        offset_timers(t, 3);
+        offset_timers(t, 4);
     }
 
     MPI_Comm_size(testcomm, &size);
@@ -755,10 +893,15 @@ void directory_test(int iteration, int ntasks) {
     } else {
         summary_table[iteration].entry[1] = 0;
     }
-    if (remove_only) {
+    if (read_only) {
         summary_table[iteration].entry[2] = items*size/(t[3] - t[2]);
     } else {
         summary_table[iteration].entry[2] = 0;
+    }
+    if (remove_only) {
+        summary_table[iteration].entry[3] = items*size/(t[4] - t[3]);
+    } else {
+        summary_table[iteration].entry[3] = 0;
     }
         
     if (verbose >= 1 && rank == 0) {
@@ -766,15 +909,19 @@ void directory_test(int iteration, int ntasks) {
               t[1] - t[0], summary_table[iteration].entry[0]);
         printf("   Directory stat    : %10.3f sec, %10.3f ops/sec\n",
               t[2] - t[1], summary_table[iteration].entry[1]);
-        printf("   Directory removal : %10.3f sec, %10.3f ops/sec\n",
+/* N/A
+        printf("   Directory read    : %10.3f sec, %10.3f ops/sec\n",
               t[3] - t[2], summary_table[iteration].entry[2]);
+*/
+        printf("   Directory removal : %10.3f sec, %10.3f ops/sec\n",
+              t[4] - t[3], summary_table[iteration].entry[3]);
         fflush(stdout);
     }
 }
 
 void file_test(int iteration, int ntasks) {
     int size;
-    double t[4] = {0};
+    double t[5] = {0};
 
     MPI_Barrier(testcomm);
     t[0] = MPI_Wtime();
@@ -828,12 +975,35 @@ void file_test(int iteration, int ntasks) {
         MPI_Barrier(testcomm);
     }
     t[2] = MPI_Wtime();
+
+    /* read phase */
+    if (read_only) {
+    
+        if (unique_dir_per_task) {
+            unique_dir_access(READ_SUB_DIR);
+            if (!time_unique_dir_overhead) {
+                offset_timers(t, 2);
+            }
+        }
+        
+		/* read files */
+		if (random_seed > 0) {
+    	    mdtest_read(1,0);
+		} else {
+    	    mdtest_read(0,0);
+		}
+    }
+
+    if (barriers) {
+        MPI_Barrier(testcomm);
+    }
+    t[3] = MPI_Wtime();
     
     if (remove_only) {
         if (unique_dir_per_task) {
             unique_dir_access(RM_SUB_DIR);
             if (!time_unique_dir_overhead) {
-                offset_timers(t, 2);
+                offset_timers(t, 3);
             }
         }
     }
@@ -852,7 +1022,7 @@ void file_test(int iteration, int ntasks) {
     if (barriers) {
         MPI_Barrier(testcomm);
     }
-    t[3] = MPI_Wtime();
+    t[4] = MPI_Wtime();
     
     if (remove_only) {
         if (unique_dir_per_task) {
@@ -860,43 +1030,50 @@ void file_test(int iteration, int ntasks) {
         }
     }
     if (unique_dir_per_task && !time_unique_dir_overhead) {
-        offset_timers(t, 3);
+        offset_timers(t, 4);
     }
     
     MPI_Comm_size(testcomm, &size);
 
     /* calculate times */
     if (create_only) {
-        summary_table[iteration].entry[3] = items*size/(t[1] - t[0]);
-    } else {
-        summary_table[iteration].entry[3] = 0;
-    }
-    if (stat_only) {
-        summary_table[iteration].entry[4] = items*size/(t[2] - t[1]);
+        summary_table[iteration].entry[4] = items*size/(t[1] - t[0]);
     } else {
         summary_table[iteration].entry[4] = 0;
     }
-    if (remove_only) {
-        summary_table[iteration].entry[5] = items*size/(t[3] - t[2]);
+    if (stat_only) {
+        summary_table[iteration].entry[5] = items*size/(t[2] - t[1]);
     } else {
         summary_table[iteration].entry[5] = 0;
+    }
+    if (read_only) {
+        summary_table[iteration].entry[6] = items*size/(t[3] - t[2]);
+    } else {
+        summary_table[iteration].entry[6] = 0;
+    }
+    if (remove_only) {
+        summary_table[iteration].entry[7] = items*size/(t[4] - t[3]);
+    } else {
+        summary_table[iteration].entry[7] = 0;
     }
 
     if (verbose >= 1 && rank == 0) {
         printf("   File creation     : %10.3f sec, %10.3f ops/sec\n",
-           t[1] - t[0], summary_table[iteration].entry[3]);
+           t[1] - t[0], summary_table[iteration].entry[4]);
         printf("   File stat         : %10.3f sec, %10.3f ops/sec\n",
-           t[2] - t[1], summary_table[iteration].entry[4]);
+           t[2] - t[1], summary_table[iteration].entry[5]);
+        printf("   File read         : %10.3f sec, %10.3f ops/sec\n",
+           t[3] - t[2], summary_table[iteration].entry[6]);
         printf("   File removal      : %10.3f sec, %10.3f ops/sec\n",
-           t[3] - t[2], summary_table[iteration].entry[5]);
+           t[4] - t[3], summary_table[iteration].entry[7]);
         fflush(stdout);
     }
 }
 
 void print_help() {
     char * opts[] = {
-"Usage: mdtest [-b branching_factor] [-B] [-c] [-C] [-d testdir] [-D] [-f first]",
-"              [-F] [-h] [-i iterations] [-I items_per_dir] [-l last] [-L]",
+"Usage: mdtest [-b branching_factor] [-B] [-c] [-C] [-d testdir] [-D] [-e number_of_bytes_to_read]",
+"              [-E] [-f first] [-F] [-h] [-i iterations] [-I items_per_dir] [-l last] [-L]",
 "              [-n number_of_items] [-N stride_length] [-p seconds] [-r]",
 "              [-R[seed]] [-s stride] [-S] [-t] [-T] [-u] [-v]",
 "              [-V verbosity_value] [-w number_of_bytes_to_write] [-y] [-z depth]",
@@ -906,6 +1083,8 @@ void print_help() {
 "\t-C: only create files/dirs",
 "\t-d: the directory in which the tests will run",
 "\t-D: perform test on directories only (no files)",
+"\t-e: bytes to read from each file",
+"\t-E: only read files/dir",
 "\t-f: first number of tasks on which the test will run",
 "\t-F: perform test on files only (no directories)",
 "\t-h: prints this help message",
@@ -913,8 +1092,8 @@ void print_help() {
 "\t-I: number of items per directory in tree",
 "\t-l: last number of tasks on which the test will run",
 "\t-L: files only at leaf level of tree",
-"\t-n: every process will creat/stat/remove # directories and files",
-"\t-N: stride # between neighbor tasks for file/dir stat (local=0)",
+"\t-n: every process will creat/stat/read/remove # directories and files",
+"\t-N: stride # between neighbor tasks for file/dir operation (local=0)",
 "\t-p: pre-iteration delay (in seconds)",
 "\t-r: only remove files or directories left behind by previous runs",
 "\t-R: randomly stat files (optional argument for random seed)",
@@ -946,7 +1125,7 @@ void print_help() {
 void summarize_results(int iterations) {
     char access[MAX_LEN];
     int i, j, k;
-    int start, stop, tableSize = 8;
+    int start, stop, tableSize = 10;
     double min, max, mean, sd, sum = 0, var = 0, curr = 0;
 
     double all[iterations * size * tableSize];
@@ -964,18 +1143,18 @@ void summarize_results(int iterations) {
             "   ---------                  ---        ---       ----    -------\n");
         fflush(stdout);
         
-        /* if files only access, skip entries 0-2 (the dir tests) */
+        /* if files only access, skip entries 0-3 (the dir tests) */
         if (files_only && !dirs_only) {
-            start = 3;
+            start = 4;
         } else {
             start = 0;
         }
     
-        /* if directories only access, skip entries 3-5 (the file tests) */
+        /* if directories only access, skip entries 4-7 (the file tests) */
         if (dirs_only && !files_only) {
-            stop = 3;
+            stop = 4;
         } else {
-            stop = 6;
+            stop = 8;
         }
 
         /* special case: if no directory or file tests, skip all */
@@ -1023,18 +1202,23 @@ void summarize_results(int iterations) {
                 switch (i) {
                     case 0: strcpy(access, "Directory creation:"); break;
                     case 1: strcpy(access, "Directory stat    :"); break;
-                    case 2: strcpy(access, "Directory removal :"); break;
-                    case 3: strcpy(access, "File creation     :"); break;
-                    case 4: strcpy(access, "File stat         :"); break;
-                    case 5: strcpy(access, "File removal      :"); break;
+                    /* case 2: strcpy(access, "Directory read    :"); break; */
+                    case 2: ;                                      break; /* N/A */
+                    case 3: strcpy(access, "Directory removal :"); break;
+                    case 4: strcpy(access, "File creation     :"); break;
+                    case 5: strcpy(access, "File stat         :"); break;
+                    case 6: strcpy(access, "File read         :"); break;
+                    case 7: strcpy(access, "File removal      :"); break;
                    default: strcpy(access, "ERR");                 break;
                 }
-                printf("   %s ", access);
-                printf("%10.3f ", max);
-                printf("%10.3f ", min);
-                printf("%10.3f ", mean);
-                printf("%10.3f\n", sd);
-                fflush(stdout);
+                if (i != 2) {
+                    printf("   %s ", access);
+                    printf("%10.3f ", max);
+                    printf("%10.3f ", min);
+                    printf("%10.3f ", mean);
+                    printf("%10.3f\n", sd);
+                    fflush(stdout);
+                }
                 sum = var = 0;
                 
             }
@@ -1067,25 +1251,30 @@ void summarize_results(int iterations) {
                 switch (i) {
                     case 0: strcpy(access, "Directory creation:"); break;
                     case 1: strcpy(access, "Directory stat    :"); break;
-                    case 2: strcpy(access, "Directory removal :"); break;
-                    case 3: strcpy(access, "File creation     :"); break;
-                    case 4: strcpy(access, "File stat         :"); break;
-                    case 5: strcpy(access, "File removal      :"); break;
+                    /* case 2: strcpy(access, "Directory read    :"); break; */
+                    case 2: ;                                      break; /* N/A */
+                    case 3: strcpy(access, "Directory removal :"); break;
+                    case 4: strcpy(access, "File creation     :"); break;
+                    case 5: strcpy(access, "File stat         :"); break;
+                    case 6: strcpy(access, "File read         :"); break;
+                    case 7: strcpy(access, "File removal      :"); break;
                    default: strcpy(access, "ERR");                 break;
                 }
-                printf("   %s ", access);
-                printf("%10.3f ", max);
-                printf("%10.3f ", min);
-                printf("%10.3f ", mean);
-                printf("%10.3f\n", sd);
-                fflush(stdout);
+                if (i != 2) {
+                    printf("   %s ", access);
+                    printf("%10.3f ", max);
+                    printf("%10.3f ", min);
+                    printf("%10.3f ", mean);
+                    printf("%10.3f\n", sd);
+                    fflush(stdout);
+                }
                 sum = var = 0;
                 
             }
         }
         
         /* calculate tree create/remove rates */
-        for (i = 6; i < tableSize; i++) {
+        for (i = 8; i < tableSize; i++) {
             min = max = all[i];
             for (j = 0; j < iterations; j++) {
                 curr = summary_table[j].entry[i];
@@ -1104,8 +1293,8 @@ void summarize_results(int iterations) {
             var = var / (iterations);
             sd = sqrt(var);
             switch (i) {
-                case 6: strcpy(access, "Tree creation     :"); break;
-                case 7: strcpy(access, "Tree removal      :"); break;
+                case 8: strcpy(access, "Tree creation     :"); break;
+                case 9: strcpy(access, "Tree removal      :"); break;
                default: strcpy(access, "ERR");                 break;
             }
             printf("   %s ", access);
@@ -1378,7 +1567,7 @@ int main(int argc, char **argv) {
 
     /* Parse command line options */
     while (1) {
-        c = getopt(argc, argv, "b:BcCd:Df:Fhi:I:l:Ln:N:p:rR::s:StTuvV:w:yz:");
+        c = getopt(argc, argv, "b:BcCd:De:Ef:Fhi:I:l:Ln:N:p:rR::s:StTuvV:w:yz:");
         if (c == -1) {
             break;
         }
@@ -1396,6 +1585,10 @@ int main(int argc, char **argv) {
                 parse_dirpath(optarg);        break;
             case 'D':
                 dirs_only = 1;                break;
+            case 'e':
+                read_bytes = atoi(optarg);    break;
+            case 'E':
+                read_only = 1;                break;
             case 'f':
                 first = atoi(optarg);         break;
             case 'F':
@@ -1451,8 +1644,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!create_only && !stat_only && !remove_only) {
-        create_only = stat_only = remove_only = 1;
+    if (!create_only && !stat_only && !read_only && !remove_only) {
+        create_only = stat_only = read_only = remove_only = 1;
     }
     
     valid_tests();
@@ -1573,6 +1766,7 @@ int main(int argc, char **argv) {
     /* default use shared directory */
     strcpy(mk_name, "mdtest.shared.");
     strcpy(stat_name, "mdtest.shared.");
+    strcpy(read_name, "mdtest.shared.");
     strcpy(rm_name, "mdtest.shared.");
     
     MPI_Comm_group(MPI_COMM_WORLD, &worldgroup);
@@ -1634,19 +1828,20 @@ int main(int argc, char **argv) {
                 }
                 MPI_Barrier(MPI_COMM_WORLD);
                 endCreate = MPI_Wtime();
-                summary_table[j].entry[6] = 
+                summary_table[j].entry[8] = 
                     num_dirs_in_tree / (endCreate - startCreate);
                 if (verbose >= 1 && rank == 0) {
                     printf("   Tree creation     : %10.3f sec, %10.3f ops/sec\n",
-                        (endCreate - startCreate), summary_table[j].entry[6]);
+                        (endCreate - startCreate), summary_table[j].entry[8]);
 					fflush(stdout);
                 }
             } else {
-               summary_table[j].entry[6] = 0;
+               summary_table[j].entry[8] = 0;
             }
             sprintf(unique_mk_dir, "%s/%s.0", testdir, base_tree_name);
             sprintf(unique_chdir_dir, "%s/%s.0", testdir, base_tree_name);
             sprintf(unique_stat_dir, "%s/%s.0", testdir, base_tree_name);
+            sprintf(unique_read_dir, "%s/%s.0", testdir, base_tree_name);
             sprintf(unique_rm_dir, "%s/%s.0", testdir, base_tree_name);
             sprintf(unique_rm_uni_dir, "%s", testdir);
 
@@ -1660,7 +1855,8 @@ int main(int argc, char **argv) {
                 if (!shared_file) {
                     sprintf(mk_name, "mdtest.%d.", (rank+(0*nstride))%i);
                     sprintf(stat_name, "mdtest.%d.", (rank+(1*nstride))%i);
-                    sprintf(rm_name, "mdtest.%d.", (rank+(2*nstride))%i);                
+                    sprintf(read_name, "mdtest.%d.", (rank+(2*nstride))%i);
+                    sprintf(rm_name, "mdtest.%d.", (rank+(3*nstride))%i);                
                 }
                 if (unique_dir_per_task) {
                     sprintf(unique_mk_dir, "%s/mdtest_tree.%d.0", testdir,
@@ -1669,8 +1865,10 @@ int main(int argc, char **argv) {
                             (rank+(1*nstride))%i);
                     sprintf(unique_stat_dir, "%s/mdtest_tree.%d.0", testdir,
                             (rank+(2*nstride))%i);
-                    sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir,
+                    sprintf(unique_read_dir, "%s/mdtest_tree.%d.0", testdir,
                             (rank+(3*nstride))%i);
+                    sprintf(unique_rm_dir, "%s/mdtest_tree.%d.0", testdir,
+                            (rank+(4*nstride))%i);
                     sprintf(unique_rm_uni_dir, "%s", testdir);
                 }
                 strcpy(top_dir, unique_mk_dir);
@@ -1713,15 +1911,15 @@ int main(int argc, char **argv) {
                 }
                 MPI_Barrier(MPI_COMM_WORLD);
                 endCreate = MPI_Wtime();
-                summary_table[j].entry[7] = num_dirs_in_tree 
+                summary_table[j].entry[9] = num_dirs_in_tree 
                     / (endCreate - startCreate);
                 if (verbose >= 1 && rank == 0) {
                     printf("   Tree removal      : %10.3f sec, %10.3f ops/sec\n",
-                        (endCreate - startCreate), summary_table[j].entry[7]);
+                        (endCreate - startCreate), summary_table[j].entry[9]);
 					fflush(stdout);
                 }                    
             } else {
-                summary_table[j].entry[7] = 0;
+                summary_table[j].entry[9] = 0;
             }
         }
         summarize_results(iterations);

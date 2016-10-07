@@ -5,17 +5,19 @@
 *                                                                              *
 \******************************************************************************/
 
-Usage:	mdtest [-b #] [-B] [-c] [-C] [-d testdir] [-D] [-f first] [-F] [-h]
-               [-i iterations] [-I #] [-l last] [-L] [-n #] [-N #] [-p seconds] 
+Usage:	mdtest [-b #] [-B] [-c] [-C] [-d testdir] [-D] [-e] [-E] [-f first] [-F]
+               [-h] [-i iterations] [-I #] [-l last] [-L] [-n #] [-N #] [-p seconds] 
                [-r] [-R[#]] [-s #] [-S] [-t] [-T] [-u] [-v] [-V #] [-w #] [-y]
                [-z #]
-               
+
     -b: branching factor of hierarchical directory structure
     -B: no barriers between phases (create/stat/remove)
     -c: collective creates: task 0 does all creates and deletes
     -C: only create files/dirs
     -d: the directory in which the tests will run
     -D: perform test on directories only (no files)
+    -e: number of bytes to read from each file
+    -E: only read files
     -f: first number of tasks on which the test will run
     -F: perform test on files only (no directories)
     -h: prints help message

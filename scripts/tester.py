@@ -27,10 +27,10 @@ RMPOOL     = 'systest'
 NODES      = 1
 TPN        = 4
 PROCS      = NODES * TPN
-EXECUTABLE = '/users/rrkroiss/Testing/mdtest/mdtest'
-TEST_DIR_LOC1 = '/panfs/scratch1/home/rrkroiss/testspace'
-TEST_DIR_LOC3 = '/panfs/scratch1/home/rrkroiss/testspace@/users/rrkroiss/testspace'
-TEST_DIRS = '/panfs/scratch1/home/rrkroiss/testspace /users/rrkroiss/testspace'
+EXECUTABLE = '/fs/home/bloewe/benchmarks/mdtest/mdtest'
+TEST_DIR_LOC1 = '/panfs/REALM226/home/V1'
+TEST_DIR_LOC3 = '/panfs/REALM226/home/V1@/panfs/REALM226/home/V2@/panfs/REALM226/home/V3'
+TEST_DIRS = '/panfs/REALM226/home/V1 /panfs/REALM226/home/V2 /panfs/REALM226/home/V3'
 
 # tests
 tests = [
@@ -181,7 +181,7 @@ def Flush2File(resultsFile, string):
 ###################
 def RunScript(resultsFile, test):
     # -- for poe --   command = "poe " + EXECUTABLE + " " + test
-    command = "mpirun -np " + str(PROCS) + " " + EXECUTABLE + " " + test
+    command = "mpiexec -n " + str(PROCS) + " " + EXECUTABLE + " " + test
     if debug == 1:
         Flush2File(resultsFile, command)
     else:
