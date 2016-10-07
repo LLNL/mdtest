@@ -1,5 +1,30 @@
-Changes in mdtest-1.8.4
- * Re-released correcting version number.
+Changes in mdtest-1.9
+ * Added use of PLFS library calls. So, a target of I/O testing can be a
+   PLFS file system.
+
+   To control whether or not mdtest is built with PLFS, one needs something
+   like the following cshrc code segment:
+
+#
+# If we're not going to use PLFS with mdtest, we don't need to define this variable.
+#
+# setenv MDTEST_FLAGS ""
+#
+# If we're going to use PLFS with mdtest, we need to define this variable based on
+# whether we are loading a PLFS module or using the system default PLFS installation.
+#
+  if ( $?PLFS_CFLAGS ) then
+    setenv MDTEST_FLAGS "-D_HAS_PLFS ${PLFS_CFLAGS} ${PLFS_LDFLAGS}"
+  else
+    setenv MDTEST_FLAGS "-D_HAS_PLFS -I${MPICH_DIR}/include -lplfs"
+  endif
+
+ * Changed the item count variables to be unsigned long long so that a
+   test can be run with more than 2^31-1 (max value of int) items.
+
+ * Fixed the remove process so that all of the directories that mdtest
+   creates get deleted if the remove flag is set. Before the #test.0
+   class of directories remained with no files in them.
 
 Changes in mdtest-1.8.4
  * Added read option to extend create (write) capability.  New feature will:
