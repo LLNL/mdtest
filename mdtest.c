@@ -23,8 +23,8 @@
  *
  * CVS info:
  *   $RCSfile: mdtest.c,v $
- *   $Revision: 1.36 $
- *   $Date: 2005/03/09 19:49:25 $
+ *   $Revision: 1.38 $
+ *   $Date: 2006/07/18 18:51:49 $
  *   $Author: loewe $
  */
 
@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -45,7 +46,8 @@
 #define FILEMODE S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH
 #define DIRMODE S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IWGRP|S_IROTH
 #define MAX_LEN 1024
-#define RELEASE_VERS "1.7.2"
+#define RELEASE_VERS "1.7.3"
+#define TEST_DIR ".mdtest"
 
 typedef struct
 {
@@ -55,6 +57,7 @@ typedef struct
 int rank;
 int size;
 char testdir[MAX_LEN] = ".";
+char testdirpath[MAX_LEN] = ".";
 char hostname[MAX_LEN];
 char unique_dir[MAX_LEN];
 char mk_name[MAX_LEN];
@@ -540,8 +543,61 @@ void valid_tests() {
     }
 }
 
+void show_file_system_size(char *file_system) {
+    char          real_path[MAX_LEN];
+    char          file_system_unit_str[MAX_LEN] = "GiB";
+    char          inode_unit_str[MAX_LEN]       = "Mi";
+    long long int file_system_unit_val          = 1024 * 1024 * 1024;
+    long long int inode_unit_val                = 1024 * 1024;
+    long long int total_file_system_size,
+                  free_file_system_size,
+                  total_inodes,
+                  free_inodes;
+    double        total_file_system_size_hr,
+                  used_file_system_percentage,
+                  used_inode_percentage;
+    struct statfs status_buffer;
+
+    if (statfs(file_system, &status_buffer) != 0) {
+        FAIL("unable to statfs() file system");
+    }
+
+    /* data blocks */
+    total_file_system_size = status_buffer.f_blocks * status_buffer.f_bsize;
+    free_file_system_size = status_buffer.f_bfree * status_buffer.f_bsize;
+    used_file_system_percentage = (1 - ((double)free_file_system_size
+                                  / (double)total_file_system_size)) * 100;
+    total_file_system_size_hr = (double)total_file_system_size
+                                / (double)file_system_unit_val;
+    if (total_file_system_size_hr > 1024) {
+        total_file_system_size_hr = total_file_system_size_hr / 1024;
+        strcpy(file_system_unit_str, "TiB");
+    }
+
+    /* inodes */
+    total_inodes = status_buffer.f_files;
+    free_inodes = status_buffer.f_ffree;
+    used_inode_percentage = (1 - ((double)free_inodes/(double)total_inodes))
+                            * 100;
+
+    /* show results */
+    if (realpath(file_system, real_path) == NULL) {
+        FAIL("unable to use realpath()");
+    }
+    fprintf(stdout, "Path: %s\n", real_path);
+    fprintf(stdout, "FS: %.1f %s   Used FS: %2.1f%%   ",
+            total_file_system_size_hr, file_system_unit_str,
+            used_file_system_percentage);
+    fprintf(stdout, "%2.1f%%", used_file_system_percentage);
+    fprintf(stdout, "Inodes: %.1f %s   Used Inodes: %2.1f%%\n",
+           (double)total_inodes / (double)inode_unit_val,
+           inode_unit_str, used_inode_percentage);
+    fflush(stdout);
+
+    return;
+}
+
 int main(int argc, char **argv) {
-    char dfCall[MAX_LEN] = {0}; /* for disk usage call */
     int i, j, c;
     int nodeCount;
     MPI_Group worldgroup, testgroup;
@@ -657,8 +713,7 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
         /* display disk usage */
-        sprintf(dfCall, "df %s\n", testdirpath);
-        system(dfCall);
+        show_file_system_size(testdir);
         fflush(stdout);
     }
 
