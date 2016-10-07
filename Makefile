@@ -7,9 +7,9 @@
 #*
 #* CVS info:
 #*   $RCSfile: Makefile,v $
-#*   $Revision: 1.1.1.1.2.1 $
-#*   $Date: 2010/05/11 21:25:16 $
-#*   $Author: loewe6 $
+#*   $Revision: 1.2 $
+#*   $Date: 2013/04/16 16:43:51 $
+#*   $Author: brettkettering $
 #*
 #* Purpose:
 #*       Make mdtest executable.

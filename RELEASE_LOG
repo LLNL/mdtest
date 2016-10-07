@@ -1,3 +1,7 @@
+Changes in mdtest-1.9.2
+ * Updated PLFS support to PLFS 2.5 API calls that return plfs_error_t. This
+   means that mdtest 1.9.2 is not compatible with PLFS versions prior to 2.5.
+
 Changes in mdtest-1.9.1
  * Removed duplicate . files from directories.
  * Fixed shared file (-S) output to state 1 file not file count based on

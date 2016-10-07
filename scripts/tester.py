@@ -11,9 +11,9 @@
 #
 # CVS info:
 #   $RCSfile: tester.py,v $
-#   $Revision: 1.1.2.1 $
-#   $Date: 2010/05/11 21:25:16 $
-#   $Author: loewe6 $
+#   $Revision: 1.2 $
+#   $Date: 2013/04/16 16:43:52 $
+#   $Author: brettkettering $
 
 import sys
 import os.path

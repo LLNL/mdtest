@@ -11,7 +11,7 @@ Prerequisites:
 
 Python 2.3.4 or higher
 setuptools (Python module installer)
-MySQLdb (a Python module)
+MySQLdb or pymysql (two different Python modules for MySQL)
 
 
 -------------

@@ -15,7 +15,20 @@
 ############################################################################
 
 import getopt,sys,os,array,string,time,user
+#
+# Unfortunately there are multiple MySQL Python modules. Which one you will
+# have depends on who built your Python distribution. These are two that we
+# have encountered. If you see an error like this:
+#
+#  File "/usr/projects/ioteam/cielito/mdtest-1.9.2//scripts/mdtest_wrapper.py", line 19, in <module>
+#    import pymysql as db
+#  ImportError: No module named pymysql
+#
+# that means that you don't have the particular MySQL module you're trying
+# to use installed. Switch to the other and see if that works.
+#
 import MySQLdb as db
+#import pymysql as db
 
 import sys
 

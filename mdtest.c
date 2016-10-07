@@ -24,9 +24,9 @@
  *
  * CVS info:
  *   $RCSfile: mdtest.c,v $
- *   $Revision: 1.1.1.1.2.1 $
- *   $Date: 2010/05/11 21:25:16 $
- *   $Author: loewe6 $
+ *   $Revision: 1.4 $
+ *   $Date: 2013/11/27 17:05:31 $
+ *   $Author: brettkettering $
  */
 
 #include "mpi.h"
@@ -44,6 +44,7 @@
 #endif
 #ifdef _HAS_PLFS
 #include <plfs.h>
+#include <plfs_error.h>
 #include <sys/statvfs.h>
 #endif
 #include <fcntl.h>
@@ -63,7 +64,7 @@
 /*
 #define MAX_LEN 1024
 */
-#define RELEASE_VERS "1.9.1"
+#define RELEASE_VERS "1.9.2"
 #define TEST_DIR "#test-dir"
 #define ITEM_COUNT 25000
 
@@ -314,6 +315,9 @@ void create_remove_items_helper(int dirs,
   char curr_item[MAX_LEN];
 #ifdef _HAS_PLFS
   int open_flags;
+  plfs_error_t plfs_ret;
+  ssize_t bytes_written;
+  int num_ref;
 #endif
 
 
@@ -342,11 +346,12 @@ void create_remove_items_helper(int dirs,
 
 #ifdef _HAS_PLFS
         if ( using_plfs_path ) {
-          if ( plfs_mkdir( curr_item, DIRMODE ) != 0 ) {
+          plfs_ret = plfs_mkdir( curr_item, DIRMODE );
+          if ( plfs_ret != PLFS_SUCCESS ) {
             FAIL("Unable to plfs_mkdir directory");
           }
         } else {
-          if (mkdir(curr_item, DIRMODE) == -1) {
+          if ( mkdir( curr_item, DIRMODE ) == -1 ) {
             FAIL("unable to create directory");
           }
         }
@@ -375,7 +380,8 @@ void create_remove_items_helper(int dirs,
         }
 #ifdef _HAS_PLFS
         if ( using_plfs_path ) {
-          if ( plfs_rmdir( curr_item ) != 0 ) {
+          plfs_ret = plfs_rmdir( curr_item );
+          if ( plfs_ret != PLFS_SUCCESS ) {
             FAIL("Unable to plfs_rmdir directory");
           }
         } else {
@@ -424,8 +430,10 @@ void create_remove_items_helper(int dirs,
  * write-only.
  */
             open_flags = O_WRONLY;
-		        wpfd = NULL;
-            if ( plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL ) != 0 ) {
+            wpfd = NULL;
+
+            plfs_ret = plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL );
+            if ( plfs_ret != PLFS_SUCCESS ) {
               FAIL( "Unable to plfs_open file" );
             }
           } else {
@@ -465,8 +473,10 @@ void create_remove_items_helper(int dirs,
  * write-only.
  */
               open_flags = O_CREAT | O_WRONLY;
-		          wpfd = NULL;
-              if ( plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL ) != 0 ) {
+              wpfd = NULL;
+
+              plfs_ret = plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL );
+              if ( plfs_ret != PLFS_SUCCESS ) {
                 FAIL( "Unable to plfs_open for create file" );
               }
             } else {
@@ -505,8 +515,10 @@ void create_remove_items_helper(int dirs,
  * write-only.
  */
               open_flags = O_CREAT | O_WRONLY;
-			        wpfd = NULL;
-              if ( plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL ) != 0 ) {
+              wpfd = NULL;
+
+              plfs_ret = plfs_open( &wpfd, curr_item, open_flags, rank, FILEMODE, NULL );
+              if ( plfs_ret != PLFS_SUCCESS ) {
                 FAIL( "Unable to plfs_open for create file" );
               }
             } else {
@@ -544,8 +556,12 @@ void create_remove_items_helper(int dirs,
               fflush( stdout );
             }
 
-            if ( plfs_write( wpfd, write_buffer, write_bytes, 0, pid ) != write_bytes ) {
+            plfs_ret = plfs_write( wpfd, write_buffer, write_bytes, 0, pid, &bytes_written );
+            if ( plfs_ret != PLFS_SUCCESS ) {
               FAIL( "Unable to plfs_write file" );
+            }
+            if ( bytes_written != write_bytes ) {
+              FAIL( "Did not plfs_write the correct number of bytes to the file" );
             }
           } else {
             if (rank == 0 && verbose >= 3) {
@@ -577,7 +593,8 @@ void create_remove_items_helper(int dirs,
               fflush( stdout );
             }
 
-            if ( plfs_sync( wpfd ) != 0 ) {
+            plfs_ret = plfs_sync( wpfd );
+            if ( plfs_ret != PLFS_SUCCESS ) {
               FAIL( "Unable to plfs_sync file" );
             }
           }
@@ -613,7 +630,8 @@ void create_remove_items_helper(int dirs,
             fflush( stdout );
           }
 
-          if ( plfs_close( wpfd, rank, uid, open_flags, 0 ) != 0 ) {
+          plfs_ret = plfs_close( wpfd, rank, uid, open_flags, NULL, &num_ref );
+          if ( plfs_ret != PLFS_SUCCESS ) {
             FAIL( "Unable to plfs_close file" );
           }
         } else {
@@ -658,7 +676,8 @@ void create_remove_items_helper(int dirs,
         if (!(shared_file && rank != 0)) {
 #ifdef _HAS_PLFS
           if ( using_plfs_path ) {
-            if ( plfs_unlink( curr_item ) != 0 ) {
+            plfs_ret = plfs_unlink( curr_item );
+            if ( plfs_ret != PLFS_SUCCESS ) {
               FAIL( "Unable to plfs_unlink file" );
             }
           } else {
@@ -684,6 +703,8 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
     char curr_item[MAX_LEN];
 #ifdef _HAS_PLFS
     int open_flags;
+    plfs_error_t plfs_ret;
+    int num_ref;
 #endif
 
 
@@ -706,7 +727,8 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
 
 #ifdef _HAS_PLFS
                 if ( using_plfs_path ) {
-                  if ( plfs_mkdir( curr_item, DIRMODE ) != 0 ) {
+                  plfs_ret = plfs_mkdir( curr_item, DIRMODE );
+                  if ( plfs_ret != PLFS_SUCCESS ) {
                     FAIL("Unable to plfs_mkdir directory");
                   }
                 } else {
@@ -729,7 +751,8 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
                 }
 #ifdef _HAS_PLFS
                 if ( using_plfs_path ) {
-                  if ( plfs_rmdir( curr_item ) != 0 ) {
+                  plfs_ret = plfs_rmdir( curr_item );
+                  if ( plfs_ret != PLFS_SUCCESS ) {
                     FAIL("Unable to plfs_rmdir directory");
                   }
                 } else {
@@ -759,7 +782,9 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
                 if ( using_plfs_path ) {
                   open_flags = O_CREAT | O_WRONLY;
 		  cpfd = NULL;
-                  if ( plfs_open( &cpfd, curr_item, open_flags, rank, FILEMODE, NULL ) != 0 ) {
+
+                  plfs_ret = plfs_open( &cpfd, curr_item, open_flags, rank, FILEMODE, NULL );
+                  if ( plfs_ret != PLFS_SUCCESS ) {
                     FAIL( "Unable to plfs_open for create file" );
                   }
                 } else {
@@ -774,7 +799,8 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
 #endif
 #ifdef _HAS_PLFS
                 if ( using_plfs_path ) {
-                  if ( plfs_close( cpfd, rank, uid, open_flags, 0 ) != 0 ) {
+                  plfs_ret = plfs_close( cpfd, rank, uid, open_flags, NULL, &num_ref );
+                  if ( plfs_ret != PLFS_SUCCESS ) {
                     FAIL( "Unable to plfs_close file" );
                   }
                 } else {
@@ -799,7 +825,8 @@ void collective_helper(int dirs, int create, char* path, unsigned long long item
                 if (!(shared_file && rank != 0)) {
 #ifdef _HAS_PLFS
                     if ( using_plfs_path ) {
-                      if ( plfs_unlink( curr_item ) != 0 ) {
+                      plfs_ret = plfs_unlink( curr_item );
+                      if ( plfs_ret != PLFS_SUCCESS ) {
                        FAIL( "Unable to plfs_unlink file" );
                       }
                     } else {
@@ -901,9 +928,12 @@ void create_remove_items(int currDepth, int dirs, int create, int collective,
 /* stats all of the items created as specified by the input parameters */
 void mdtest_stat(int random, int dirs, char *path) {
 	
-	struct stat buf;
-	unsigned long long i, parent_dir, item_num = 0;
-	char item[MAX_LEN], temp[MAX_LEN];
+  struct stat buf;
+  unsigned long long i, parent_dir, item_num = 0;
+  char item[MAX_LEN], temp[MAX_LEN];
+#ifdef _HAS_PLFS
+  plfs_error_t plfs_ret;
+#endif
 
 
   if (( rank == 0 ) && ( verbose >= 1 )) {
@@ -993,7 +1023,8 @@ void mdtest_stat(int random, int dirs, char *path) {
 
 #ifdef _HAS_PLFS
     if ( using_plfs_path ) {
-      if ( plfs_getattr( NULL, item, &buf, 0 ) != 0 ) {
+      plfs_ret = plfs_getattr( NULL, item, &buf, 0 );
+      if ( plfs_ret != PLFS_SUCCESS ) {
         if (dirs) {
           if ( verbose >= 3 ) {
             fprintf( stdout, "V-3: Stat'ing directory \"%s\"\n", item );
@@ -1049,9 +1080,14 @@ void mdtest_stat(int random, int dirs, char *path) {
 /* reads all of the items created as specified by the input parameters */
 void mdtest_read(int random, int dirs, char *path) {
 	
-	unsigned long long i, parent_dir, item_num = 0;
+  unsigned long long i, parent_dir, item_num = 0;
   int fd;
-	char item[MAX_LEN], temp[MAX_LEN];
+  char item[MAX_LEN], temp[MAX_LEN];
+#ifdef _HAS_PLFS
+  plfs_error_t plfs_ret;
+  ssize_t bytes_read;
+  int num_ref;
+#endif
 
 
   if (( rank == 0 ) && ( verbose >= 1 )) {
@@ -1152,7 +1188,8 @@ void mdtest_read(int random, int dirs, char *path) {
        * read-only.
        */
       rpfd = NULL;
-      if ( plfs_open( &rpfd, item, O_RDONLY, rank, FILEMODE, NULL ) != 0 ) {
+      plfs_ret = plfs_open( &rpfd, item, O_RDONLY, rank, FILEMODE, NULL );
+      if ( plfs_ret != PLFS_SUCCESS ) {
         FAIL( "Unable to plfs_open for read file" );
       }
     } else {
@@ -1174,8 +1211,12 @@ void mdtest_read(int random, int dirs, char *path) {
        * offset 0 (zero).
        */
       if ( using_plfs_path ) {
-        if ( plfs_read( rpfd, read_buffer, read_bytes, 0 )  != read_bytes ) {
+        plfs_ret = plfs_read( rpfd, read_buffer, read_bytes, 0, &bytes_read );
+        if ( plfs_ret != PLFS_SUCCESS ) {
           FAIL( "Unable to plfs_read file" );
+        }
+        if ( bytes_read != read_bytes ) {
+          FAIL( "Did not plfs_read the correct number of bytes from the file" );
         }
       } else {
         if (read(fd, read_buffer, read_bytes) != read_bytes) {
@@ -1192,7 +1233,8 @@ void mdtest_read(int random, int dirs, char *path) {
     /* close file */
 #ifdef _HAS_PLFS
     if ( using_plfs_path ) {
-      if ( plfs_close( rpfd, rank, uid, O_RDONLY, 0 ) != 0 ) {
+      plfs_ret = plfs_close( rpfd, rank, uid, O_RDONLY, NULL, &num_ref );
+      if ( plfs_ret != PLFS_SUCCESS ) {
         FAIL( "Unable to plfs_close file" );
       }
     } else {
@@ -1994,21 +2036,23 @@ void valid_tests() {
 }
 
 void show_file_system_size(char *file_system) {
-    char          real_path[MAX_LEN];
-    char          file_system_unit_str[MAX_LEN] = "GiB";
-    char          inode_unit_str[MAX_LEN]       = "Mi";
-    long long int file_system_unit_val          = 1024 * 1024 * 1024;
-    long long int inode_unit_val                = 1024 * 1024;
-    long long int total_file_system_size,
-                  free_file_system_size,
-                  total_inodes,
-                  free_inodes;
-    double        total_file_system_size_hr,
-                  used_file_system_percentage,
-                  used_inode_percentage;
-    struct statfs status_buffer;
+  char          real_path[MAX_LEN];
+  char          file_system_unit_str[MAX_LEN] = "GiB";
+  char          inode_unit_str[MAX_LEN]       = "Mi";
+  long long int file_system_unit_val          = 1024 * 1024 * 1024;
+  long long int inode_unit_val                = 1024 * 1024;
+  long long int total_file_system_size,
+                free_file_system_size,
+                total_inodes,
+                free_inodes;
+  double        total_file_system_size_hr,
+                used_file_system_percentage,
+                used_inode_percentage;
+  struct statfs status_buffer;
 #ifdef _HAS_PLFS
-    struct statvfs stbuf;
+  struct statvfs stbuf;
+  plfs_error_t plfs_ret;
+#endif
 
 
   if (( rank == 0 ) && ( verbose >= 1 )) {
@@ -2016,104 +2060,99 @@ void show_file_system_size(char *file_system) {
     fflush( stdout );
   }
 
+#ifdef _HAS_PLFS
+  if ( using_plfs_path ) {
+    /*
+    printf( "Detected that file system, \"%s\" is a PLFS file system.\n", file_system );
+    */
 
-    if ( using_plfs_path ) {
-      /*
-      printf( "Detected that file system, \"%s\" is a PLFS file system.\n", file_system );
-      */
-      if ( plfs_statvfs( file_system, &stbuf ) != 0 ) {
-        FAIL( "unable to plfs_statvfs() file system" );
-      }
-    } else {
-      /*
-      printf( "Detected that file system, \"%s\" is a regular file system.\n", file_system );
-      */
-      if ( statfs( file_system, &status_buffer ) != 0 ) {
-        FAIL("unable to statfs() file system");
-      }
+    plfs_ret = plfs_statvfs( file_system, &stbuf );
+    if ( plfs_ret != PLFS_SUCCESS ) {
+      FAIL( "unable to plfs_statvfs() file system" );
     }
+  } else {
+    /*
+    printf( "Detected that file system, \"%s\" is a regular file system.\n", file_system );
+    */
+    if ( statfs( file_system, &status_buffer ) != 0 ) {
+      FAIL("unable to statfs() file system");
+    }
+  }
 #else
-
-
-  if (( rank == 0 ) && ( verbose >= 1 )) {
-    fprintf( stdout, "V-1: Entering show_file_system_size...\n" );
-    fflush( stdout );
+  if (statfs(file_system, &status_buffer) != 0) {
+    FAIL("unable to statfs() file system");
   }
-
-    if (statfs(file_system, &status_buffer) != 0) {
-        FAIL("unable to statfs() file system");
-    }
 #endif
 
     /* data blocks */
 #ifdef _HAS_PLFS
-    if ( using_plfs_path ) {
-      total_file_system_size = stbuf.f_blocks * stbuf.f_bsize;
-      free_file_system_size = stbuf.f_bfree * stbuf.f_bsize;
-    } else {
-      total_file_system_size = status_buffer.f_blocks * status_buffer.f_bsize;
-      free_file_system_size = status_buffer.f_bfree * status_buffer.f_bsize;
-    }
-#else
+  if ( using_plfs_path ) {
+    total_file_system_size = stbuf.f_blocks * stbuf.f_bsize;
+    free_file_system_size = stbuf.f_bfree * stbuf.f_bsize;
+  } else {
     total_file_system_size = status_buffer.f_blocks * status_buffer.f_bsize;
     free_file_system_size = status_buffer.f_bfree * status_buffer.f_bsize;
+  }
+#else
+  total_file_system_size = status_buffer.f_blocks * status_buffer.f_bsize;
+  free_file_system_size = status_buffer.f_bfree * status_buffer.f_bsize;
 #endif
-    used_file_system_percentage = (1 - ((double)free_file_system_size
-                                  / (double)total_file_system_size)) * 100;
-    total_file_system_size_hr = (double)total_file_system_size
-                                / (double)file_system_unit_val;
-    if (total_file_system_size_hr > 1024) {
-        total_file_system_size_hr = total_file_system_size_hr / 1024;
-        strcpy(file_system_unit_str, "TiB");
-    }
+  used_file_system_percentage = (1 - ((double)free_file_system_size
+                                / (double)total_file_system_size)) * 100;
+  total_file_system_size_hr = (double)total_file_system_size
+                              / (double)file_system_unit_val;
+  if (total_file_system_size_hr > 1024) {
+    total_file_system_size_hr = total_file_system_size_hr / 1024;
+    strcpy(file_system_unit_str, "TiB");
+  }
 
     /* inodes */
 #ifdef _HAS_PLFS
-    if ( using_plfs_path ) {
-      total_inodes = stbuf.f_files;
-      free_inodes = stbuf.f_ffree;
-    } else {
-      total_inodes = status_buffer.f_files;
-      free_inodes = status_buffer.f_ffree;
-    }
-#else
+  if ( using_plfs_path ) {
+    total_inodes = stbuf.f_files;
+    free_inodes = stbuf.f_ffree;
+  } else {
     total_inodes = status_buffer.f_files;
     free_inodes = status_buffer.f_ffree;
+  }
+#else
+  total_inodes = status_buffer.f_files;
+  free_inodes = status_buffer.f_ffree;
 #endif
-    used_inode_percentage = (1 - ((double)free_inodes/(double)total_inodes))
-                            * 100;
+  used_inode_percentage = (1 - ((double)free_inodes/(double)total_inodes))
+                          * 100;
 
     /* show results */
 #ifdef _HAS_PLFS
-    if ( using_plfs_path ) {
-      strcpy( real_path, file_system );
-    } else {
-      if (realpath(file_system, real_path) == NULL) {
-        FAIL("unable to use realpath()");
-      }
-    }
-#else
+  if ( using_plfs_path ) {
+    strcpy( real_path, file_system );
+  } else {
     if (realpath(file_system, real_path) == NULL) {
-        FAIL("unable to use realpath()");
+      FAIL("unable to use realpath()");
     }
+  }
+#else
+  if (realpath(file_system, real_path) == NULL) {
+    FAIL("unable to use realpath()");
+  }
 #endif
-    fprintf(stdout, "Path: %s\n", real_path);
-    fprintf(stdout, "FS: %.1f %s   Used FS: %2.1f%%   ",
-            total_file_system_size_hr, file_system_unit_str,
-            used_file_system_percentage);
-    fprintf(stdout, "Inodes: %.1f %s   Used Inodes: %2.1f%%\n",
-           (double)total_inodes / (double)inode_unit_val,
-           inode_unit_str, used_inode_percentage);
-    fflush(stdout);
+  fprintf(stdout, "Path: %s\n", real_path);
+  fprintf(stdout, "FS: %.1f %s   Used FS: %2.1f%%   ",
+          total_file_system_size_hr, file_system_unit_str,
+          used_file_system_percentage);
+  fprintf(stdout, "Inodes: %.1f %s   Used Inodes: %2.1f%%\n",
+         (double)total_inodes / (double)inode_unit_val,
+         inode_unit_str, used_inode_percentage);
+  fflush(stdout);
 
-    return;
+  return;
 }
 
 void display_freespace(char *testdirpath)
 {
-    char dirpath[MAX_LEN] = {0};
-    int  i;
-    int  directoryFound   = 0;
+  char dirpath[MAX_LEN] = {0};
+  int  i;
+  int  directoryFound   = 0;
 
 
   if (( rank == 0 ) && ( verbose >= 1 )) {
@@ -2121,48 +2160,51 @@ void display_freespace(char *testdirpath)
     fflush( stdout );
   }
 
-    if (verbose >= 3 && rank == 0) {
-      printf( "V-3: testdirpath is \"%s\"\n", testdirpath );
-      fflush( stdout );
-    }
+  if (verbose >= 3 && rank == 0) {
+    printf( "V-3: testdirpath is \"%s\"\n", testdirpath );
+    fflush( stdout );
+  }
 
-    strcpy(dirpath, testdirpath);
+  strcpy(dirpath, testdirpath);
 
     /* get directory for outfile */
-    i = strlen(dirpath);
-    while (i-- > 0) {
-        if (dirpath[i] == '/') {
-            dirpath[i] = '\0';
-            directoryFound = 1;
-            break;
-        }
+  i = strlen(dirpath);
+  while (i-- > 0) {
+    if (dirpath[i] == '/') {
+      dirpath[i] = '\0';
+      directoryFound = 1;
+      break;
     }
+  }
 
     /* if no directory/, use '.' */
-    if (directoryFound == 0) {
-        strcpy(dirpath, ".");
-    }
+  if (directoryFound == 0) {
+    strcpy(dirpath, ".");
+  }
 
-    if (verbose >= 3 && rank == 0) {
-      printf( "V-3: Before show_file_system_size, dirpath is \"%s\"\n", dirpath );
-      fflush( stdout );
-    }
+  if (verbose >= 3 && rank == 0) {
+    printf( "V-3: Before show_file_system_size, dirpath is \"%s\"\n", dirpath );
+    fflush( stdout );
+  }
 
-    show_file_system_size(dirpath);
+  show_file_system_size(dirpath);
 
-    if (verbose >= 3 && rank == 0) {
-      printf( "V-3: After show_file_system_size, dirpath is \"%s\"\n", dirpath );
-      fflush( stdout );
-    }
+  if (verbose >= 3 && rank == 0) {
+    printf( "V-3: After show_file_system_size, dirpath is \"%s\"\n", dirpath );
+    fflush( stdout );
+  }
 
-    return;
+  return;
 }
 
 void create_remove_directory_tree(int create, 
                                   int currDepth, char* path, int dirNum) {
 
-	int i;
-	char dir[MAX_LEN];
+  int i;
+  char dir[MAX_LEN];
+#ifdef _HAS_PLFS
+  plfs_error_t plfs_ret;
+#endif
 
 
   if (( rank == 0 ) && ( verbose >= 1 )) {
@@ -2170,119 +2212,120 @@ void create_remove_directory_tree(int create,
     fflush( stdout );
   }
 
-	if (currDepth == 0) {
+  if (currDepth == 0) {
+    sprintf(dir, "%s/%s.%d/", path, base_tree_name, dirNum);
 
-	    sprintf(dir, "%s/%s.%d/", path, base_tree_name, dirNum);
-
-		if (create) {
-			if (rank == 0 && verbose >= 2) {
-				printf("V-2: Making directory \"%s\"\n", dir);
-				fflush(stdout);
-			}
+    if (create) {
+      if (rank == 0 && verbose >= 2) {
+        printf("V-2: Making directory \"%s\"\n", dir);
+        fflush(stdout);
+      }
 #ifdef _HAS_PLFS
       if ( using_plfs_path ) {
-        if ( plfs_mkdir( dir, DIRMODE ) != 0 ) {
+        plfs_ret = plfs_mkdir( dir, DIRMODE );
+        if ( plfs_ret != PLFS_SUCCESS ) {
           FAIL("Unable to plfs_mkdir directory");
         }
       } else {
-			  if (mkdir(dir, DIRMODE) == -1) {
-			  	FAIL("Unable to create directory");
-			  }
+        if (mkdir(dir, DIRMODE) == -1) {
+          FAIL("Unable to create directory");
+        }
       }
 #else
-			if (mkdir(dir, DIRMODE) == -1) {
-				FAIL("Unable to create directory");
-			}
+      if (mkdir(dir, DIRMODE) == -1) {
+        FAIL("Unable to create directory");
+      }
 #endif
-		}
+    }
 
-		create_remove_directory_tree(create, ++currDepth, dir, ++dirNum);
+    create_remove_directory_tree(create, ++currDepth, dir, ++dirNum);
 
-		if (!create) {
-			if (rank == 0 && verbose >= 2) {
-				printf("V-2: Remove directory \"%s\"\n", dir);
-				fflush(stdout);
-			}
+    if (!create) {
+      if (rank == 0 && verbose >= 2) {
+        printf("V-2: Remove directory \"%s\"\n", dir);
+        fflush(stdout);
+      }
 #ifdef _HAS_PLFS
       if ( using_plfs_path ) {
-        if ( plfs_rmdir( dir ) != 0 ) {
+        plfs_ret = plfs_rmdir( dir );
+        if ( plfs_ret != PLFS_SUCCESS ) {
           FAIL("Unable to plfs_rmdir directory");
         }
       } else {
-			  if (rmdir(dir) == -1) {
-			  	FAIL("Unable to remove directory");
-			  }
+        if (rmdir(dir) == -1) {
+          FAIL("Unable to remove directory");
+        }
       }
 #else
-			if (rmdir(dir) == -1) {
-				FAIL("Unable to remove directory");
-			}
+      if (rmdir(dir) == -1) {
+        FAIL("Unable to remove directory");
+      }
 #endif
-		}
+    }
+  } else if (currDepth <= depth) {
 
-	} else if (currDepth <= depth) {
-	
-		char temp_path[MAX_LEN];
-		strcpy(temp_path, path);
-		int currDir = dirNum;
+    char temp_path[MAX_LEN];
+    strcpy(temp_path, path);
+    int currDir = dirNum;
 
-		for (i=0; i<branch_factor; i++) {
+    for (i=0; i<branch_factor; i++) {
+      sprintf(dir, "%s.%d/", base_tree_name, currDir);
+      strcat(temp_path, dir);
 
-			sprintf(dir, "%s.%d/", base_tree_name, currDir);
-			strcat(temp_path, dir);
-
-			if (create) {
-				if (rank == 0 && verbose >= 2) {
-					printf("V-2: Making directory \"%s\"\n", temp_path);
-					fflush(stdout);
-				}
+      if (create) {
+        if (rank == 0 && verbose >= 2) {
+          printf("V-2: Making directory \"%s\"\n", temp_path);
+          fflush(stdout);
+        }
 #ifdef _HAS_PLFS
         if ( using_plfs_path ) {
-          if ( plfs_mkdir( temp_path, DIRMODE ) != 0 ) {
+          plfs_ret = plfs_mkdir( temp_path, DIRMODE );
+          if ( plfs_ret != PLFS_SUCCESS ) {
             FAIL("Unable to plfs_mkdir directory");
           }
         } else {
-				  if (mkdir(temp_path, DIRMODE) == -1) {
-				  	FAIL("Unable to create directory");
-				  }
+          if (mkdir(temp_path, DIRMODE) == -1) {
+            FAIL("Unable to create directory");
+          }
         }
 #else
-				if (mkdir(temp_path, DIRMODE) == -1) {
-					FAIL("Unable to create directory");
-				}
+        if (mkdir(temp_path, DIRMODE) == -1) {
+          FAIL("Unable to create directory");
+        }
 #endif
-			}
+      }
 
-			create_remove_directory_tree(create, ++currDepth, 
-                                         temp_path, (branch_factor*currDir)+1);
-			currDepth--;
-			
-			if (!create) {
-				if (rank == 0 && verbose >= 2) {
-					printf("V-2: Remove directory \"%s\"\n", temp_path);
-					fflush(stdout);
-				}
+      create_remove_directory_tree(create, ++currDepth, 
+                                   temp_path, (branch_factor*currDir)+1);
+      currDepth--;
+
+      if (!create) {
+        if (rank == 0 && verbose >= 2) {
+          printf("V-2: Remove directory \"%s\"\n", temp_path);
+          fflush(stdout);
+        }
 #ifdef _HAS_PLFS
         if ( using_plfs_path ) {
-          if ( plfs_rmdir( temp_path ) != 0 ) {
+          plfs_ret = plfs_rmdir( temp_path );
+          if ( plfs_ret != PLFS_SUCCESS ) {
             FAIL("Unable to plfs_rmdir directory");
           }
         } else {
-				  if (rmdir(temp_path) == -1) {
-				  	FAIL("Unable to remove directory");
-				  }
+          if (rmdir(temp_path) == -1) {
+            FAIL("Unable to remove directory");
+          }
         }
 #else
-				if (rmdir(temp_path) == -1) {
-					FAIL("Unable to remove directory");
-				}
+        if (rmdir(temp_path) == -1) {
+          FAIL("Unable to remove directory");
+        }
 #endif
-			}
+      }
 			
-			strcpy(temp_path, path);
+      strcpy(temp_path, path);
       currDir++;
-		}
-	}
+    }
+  }
 }
 
 int main(int argc, char **argv) {
@@ -2314,6 +2357,7 @@ int main(int argc, char **argv) {
 #ifdef _HAS_PLFS
     pid = getpid();
     uid = getuid();
+    plfs_error_t plfs_ret;
 #endif
 
     nodeCount = size / count_tasks_per_node();
@@ -2559,9 +2603,13 @@ int main(int argc, char **argv) {
     /*   if directory does not exist, create it */
 #ifdef _HAS_PLFS
     if ( using_plfs_path ) {
-      if (( rank < path_count ) && ( plfs_access( testdirpath, F_OK ) != 0 )) {
-        if ( plfs_mkdir( testdirpath, DIRMODE ) != 0 ) {
-          FAIL("Unable to plfs_mkdir test directory path");
+      if ( rank < path_count ) {
+        plfs_ret = plfs_access( testdirpath, F_OK );
+        if ( plfs_ret != PLFS_SUCCESS ) {
+          plfs_ret = plfs_mkdir( testdirpath, DIRMODE );
+          if ( plfs_ret != PLFS_SUCCESS ) {
+            FAIL("Unable to plfs_mkdir test directory path");
+          }
         }
       }
     } else {
@@ -2573,9 +2621,9 @@ int main(int argc, char **argv) {
     }
 #else
     if ((rank < path_count) && access(testdirpath, F_OK) != 0) {
-        if (mkdir(testdirpath, DIRMODE) != 0) {
-            FAIL("Unable to create test directory path");
-        }
+      if (mkdir(testdirpath, DIRMODE) != 0) {
+        FAIL("Unable to create test directory path");
+      }
     }
 #endif
 
@@ -2673,9 +2721,13 @@ int main(int argc, char **argv) {
             }
 #ifdef _HAS_PLFS
             if ( using_plfs_path ) {
-              if (( rank < path_count ) && ( plfs_access( testdir, F_OK ) != 0 )) {
-                if ( plfs_mkdir( testdir, DIRMODE ) != 0 ) {
-                  FAIL("Unable to plfs_mkdir test directory");
+              if ( rank < path_count ) {
+                plfs_ret = plfs_access( testdir, F_OK );
+                if ( plfs_ret != PLFS_SUCCESS ) {
+                  plfs_ret = plfs_mkdir( testdir, DIRMODE );
+                  if ( plfs_ret != PLFS_SUCCESS ) {
+                    FAIL("Unable to plfs_mkdir test directory");
+                  }
                 }
               }
             } else {
@@ -2898,10 +2950,13 @@ int main(int argc, char **argv) {
 
 #ifdef _HAS_PLFS
                 if ( using_plfs_path ) {
-                  if (( rank < path_count ) && ( plfs_access( testdir, F_OK ) == 0 )) {
-                  //if (( rank == 0 ) && ( plfs_access( testdir, F_OK ) == 0 )) {
-                    if ( plfs_rmdir( testdir ) != 0 ) {
-                      FAIL("Unable to plfs_rmdir directory");
+                  if ( rank < path_count ) {
+                    plfs_ret = plfs_access( testdir, F_OK );
+                    if ( plfs_ret == PLFS_SUCCESS ) {
+                      plfs_ret = plfs_rmdir( testdir );
+                      if ( plfs_ret != PLFS_SUCCESS ) {
+                        FAIL("Unable to plfs_rmdir directory");
+                      }
                     }
                   }
                 } else {
