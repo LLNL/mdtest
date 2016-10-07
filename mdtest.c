@@ -63,7 +63,7 @@
 /*
 #define MAX_LEN 1024
 */
-#define RELEASE_VERS "1.9"
+#define RELEASE_VERS "1.9.1"
 #define TEST_DIR "#test-dir"
 #define ITEM_COUNT 25000
 
@@ -2639,7 +2639,12 @@ int main(int argc, char **argv) {
             if (files_only && dirs_only) {
                 printf("\n%d tasks, %llu files/directories\n", i, i * items);
             } else if (files_only) {
-                printf("\n%d tasks, %llu files\n", i, i * items);
+                if (!shared_file) {
+                    printf("\n%d tasks, %llu files\n", i, i * items);
+                }
+                else {
+                    printf("\n%d tasks, 1 file\n", i);
+                }
             } else if (dirs_only) {
                 printf("\n%d tasks, %llu directories\n", i, i * items);
             }

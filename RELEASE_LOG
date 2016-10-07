@@ -1,3 +1,8 @@
+Changes in mdtest-1.9.1
+ * Removed duplicate . files from directories.
+ * Fixed shared file (-S) output to state 1 file not file count based on
+   process count.
+
 Changes in mdtest-1.9
  * Added use of PLFS library calls. So, a target of I/O testing can be a
    PLFS file system.
