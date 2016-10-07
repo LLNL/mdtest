@@ -64,7 +64,7 @@
 /*
 #define MAX_LEN 1024
 */
-#define RELEASE_VERS "1.9.2"
+#define RELEASE_VERS "1.9.3"
 #define TEST_DIR "#test-dir"
 #define ITEM_COUNT 25000
 
@@ -1987,6 +1987,15 @@ void valid_tests() {
     /* if shared file 'S' access, no directory tests */
     if (shared_file) {
         dirs_only = 0;
+    }
+
+    /* check for no barriers with shifting processes for different phases.
+       that is, one may not specify both -B and -N as it will introduce
+       race conditions that may cause errors stat'ing or deleting after
+       creates.
+     */
+    if (( barriers == 0 ) && ( nstride != 0 ) && ( rank == 0 )) {
+      FAIL( "Possible race conditions will occur: -B not compatible with -N");
     }
 
     /* check for collective_creates incompatibilities */

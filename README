@@ -43,7 +43,7 @@ Usage:	mdtest [-b #] [-B] [-c] [-C] [-d testdir] [-D] [-e] [-E] [-f first] [-F]
 
 NOTES:
  * -N allows a "read-your-neighbor" approach by setting stride to 
-    tasks-per-node
+    tasks-per-node. Do not use it with -B, as it creates race conditions.
  * -d allows multiple paths for the form '-d fullpath1@fullpath2@fullpath3'
  * -B allows each task to time itself. The aggregate results reflect this 
     change.

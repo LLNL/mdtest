@@ -1,3 +1,9 @@
+Changes in mdtest-1.9.3
+ * Checked for -B used with -N. This creates possible race conditions where
+   a process may try to stat or delete a file it did not create and the
+   process responsible did not yet create it or another process already
+   deleted it (in the case of stat).
+
 Changes in mdtest-1.9.2
  * Updated PLFS support to PLFS 2.5 API calls that return plfs_error_t. This
    means that mdtest 1.9.2 is not compatible with PLFS versions prior to 2.5.
