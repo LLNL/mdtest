@@ -1,3 +1,9 @@
+# mdtest
+
+This repo is being archived, please see: https://github.com/MDTEST-LANL/mdtest
+
+--
+
 /******************************************************************************\
 *                                                                              *
 *        Copyright (c) 2003, The Regents of the University of California       *
